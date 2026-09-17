@@ -49,6 +49,10 @@ class TestUnwrap:
         with pytest.raises(ValueError, match="boom"):
             unwrap(err(ValueError("boom")))
 
+    def test_unwrap_non_exception_error(self) -> None:
+        with pytest.raises(TypeError, match="Cannot raise non-exception error"):
+            unwrap(err("plain string"))
+
 
 class TestUnwrapOr:
     def test_unwrap_or_ok(self) -> None:

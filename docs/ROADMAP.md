@@ -25,22 +25,40 @@
 - Test structure
 - ADR-001
 
-## Stage 2 — Domain Schemas
+## Stage 2a — Domain Schemas (Planning Spine)
+
+**Status: COMPLETE**
+**Completed:** 2026-09-17
+
+- Pydantic v2 BaseModel for all domain models (frozen, extra="forbid")
+- Identity utilities: new_id(), compute_content_hash(), with_content_hash()
+- ArtifactBase with schema_version, id, artifact_type, status, created_at, content_hash, parent_id, generator, source_refs
+- GeneratorInfo (provider, model, prompt_version)
+- LearnerProfile (subject, level, goals, challenges, prior_knowledge, constraints) — fully subject-agnostic
+- ProductDefinition (title, subject, topic, level, problem_statement, learner_profile_id)
+- LearningObjective (statement, bloom_level, mastery_criteria) with BloomLevel enum
+- Prerequisite (prerequisite_objective_id, objective_id, rationale)
+- CurriculumUnit (unit_id, title, objective_ids, order) and CurriculumBlueprint
+- check_objective_references() validation function
+- ADR-002 documenting schema decisions
+- 39 tests passing
+
+## Stage 2b — Domain Schemas (Content Models)
 
 **Status: PENDING**
 
-- Artifact model
-- Product definition
-- Learner profile
-- Learning objectives
-- Prerequisite graph
-- Curriculum
-- Lessons
-- Practice
+- Lesson
+- WorkedExample
+- Misconception
+- PracticeQuestion
+- Hint
+- AnswerKey
+- Rubric
 - Assessment
-- Evidence
-- Visual specification
-- Quality results
+- EvidenceRecord
+- VisualSpecification
+- QualityGateResult
+- VerificationResult
 
 ## Stage 3 — Workflow Engine
 

@@ -2,7 +2,7 @@
 
 A subject-agnostic system that transforms a learner problem into a complete, evidence-aware, verifiable educational product.
 
-## What It Does
+## What It Is Intended To Do
 
 Given a subject, topic, learner profile, and problem description, the factory generates:
 

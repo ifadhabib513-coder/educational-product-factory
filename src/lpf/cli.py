@@ -6,6 +6,7 @@ import click
 
 from lpf import __version__
 from lpf.config import LpfConfig, load_config
+from lpf.logging_setup import setup_logging
 
 
 @click.group()
@@ -14,7 +15,9 @@ from lpf.config import LpfConfig, load_config
 def main(ctx: click.Context) -> None:
     """AI Educational Product Factory — generate complete learning products."""
     ctx.ensure_object(dict)
-    ctx.obj["config"] = load_config()
+    config = load_config()
+    setup_logging(config)
+    ctx.obj["config"] = config
 
 
 @main.command()

@@ -62,7 +62,10 @@ def unwrap(result: Result[T, E]) -> T:
     """
     if isinstance(result, Ok):
         return result.value
-    raise result.error  # type: ignore[misc]
+    error = result.error
+    if not isinstance(error, BaseException):
+        raise TypeError(f"Cannot raise non-exception error: {error!r}")
+    raise error
 
 
 def unwrap_or(result: Result[T, E], default: T) -> T:
