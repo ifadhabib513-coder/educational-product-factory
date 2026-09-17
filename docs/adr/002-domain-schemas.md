@@ -31,7 +31,7 @@ Generated at creation time via `new_id()`. IDs are opaque identifiers, not conte
 
 ### 5. Timestamps: UTC datetimes
 
-All `created_at` fields default to `datetime.now(timezone.utc)`. No timezone-naive timestamps.
+All `created_at` fields default to `datetime.now(UTC)`. No timezone-naive timestamps.
 
 ### 6. Referential integrity via functions returning Result
 
@@ -39,8 +39,12 @@ Cross-artifact validation (e.g., `check_objective_references`) returns `Result[T
 
 ### 7. Artifact hierarchy
 
-- **Root artifacts** inherit `ArtifactBase`: ProductDefinition, CurriculumBlueprint, LearningObjective
+- **Root artifacts** inherit `ArtifactBase`: ProductDefinition, CurriculumBlueprint, LearningObjective, LearnerProfile
 - **Embedded value objects** are plain `BaseModel`: Prerequisite, CurriculumUnit, GeneratorInfo
+
+### 8. Two-layer validation (belt and suspenders)
+
+Schema guards and validation functions both exist. For example, `CurriculumUnit.objective_ids` has `Field(min_length=1)` as the first line of defense. The `check_objective_references()` function independently checks for empty objective_ids as a second line of defense. This ensures code paths that bypass Pydantic validation (e.g., `model_construct()`) are still caught by the validation function.
 
 ## Consequences
 

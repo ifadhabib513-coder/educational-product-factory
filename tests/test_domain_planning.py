@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from lpf.domain.curriculum import CurriculumBlueprint, CurriculumUnit
 from lpf.domain.identity import compute_content_hash, new_id, with_content_hash
@@ -34,7 +35,7 @@ def _make_product(profile: LearnerProfile) -> ProductDefinition:
         topic="Projectile Motion",
         level="high-school",
         problem_statement="Student confuses vertical and horizontal motion components",
-        learner_profile_id=profile.__dict__.get("id", "test-id"),
+        learner_profile_id=profile.id,
     )
 
 
@@ -92,12 +93,12 @@ def _make_blueprint(objs: list[LearningObjective]) -> CurriculumBlueprint:
 
 class TestExtraForbid:
     def test_rejects_unknown_field(self) -> None:
-        with pytest.raises(Exception, match="extra"):
+        with pytest.raises(ValidationError, match="extra"):
             LearnerProfile(subject="Math", level="HS", bogus_field="nope")  # type: ignore[call-arg]
 
     def test_frozen_assignment_raises(self) -> None:
         profile = _make_profile()
-        with pytest.raises(Exception, match="frozen"):
+        with pytest.raises(ValidationError, match="frozen"):
             profile.subject = "Chemistry"  # type: ignore[misc]
 
 
@@ -109,14 +110,14 @@ class TestExtraForbid:
 class TestContentHash:
     def test_deterministic(self) -> None:
         p1 = _make_profile()
-        p2 = _make_profile()
+        p2 = p1.model_copy()
         h1 = compute_content_hash(p1)
         h2 = compute_content_hash(p2)
         assert h1 == h2
 
     def test_sensitive_to_change(self) -> None:
         p1 = _make_profile()
-        p2 = _make_profile().model_copy(update={"subject": "Chemistry"})
+        p2 = p1.model_copy(update={"subject": "Chemistry"})
         assert compute_content_hash(p1) != compute_content_hash(p2)
 
     def test_stable_across_json_roundtrip(self) -> None:
@@ -162,6 +163,7 @@ class TestFullPlan:
         blueprint = _make_blueprint(objectives)
 
         assert product.artifact_type == "product_definition"
+        assert product.learner_profile_id == profile.id
         assert len(objectives) == 3
         assert len(blueprint.units) == 2
         assert len(prereqs) == 1
@@ -196,12 +198,10 @@ class TestCheckObjectiveReferences:
         assert len(error.details["missing"]) > 0
 
     def test_err_path_empty_objective_ids(self) -> None:
-        blueprint = CurriculumBlueprint(
-            title="Bad Blueprint",
-            units=[
-                CurriculumUnit(unit_id="u1", title="Empty", objective_ids=[], order=1),
-            ],
+        bad_unit = CurriculumUnit.model_construct(
+            unit_id="u1", title="Empty", objective_ids=[], order=1
         )
+        blueprint = CurriculumBlueprint.model_construct(title="Bad Blueprint", units=[bad_unit])
         result = check_objective_references(blueprint, set())
         from lpf.result import is_err
 

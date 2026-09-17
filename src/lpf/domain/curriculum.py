@@ -19,7 +19,7 @@ class CurriculumUnit(BaseModel):
 
     unit_id: str
     title: str
-    objective_ids: list[str] = Field(default_factory=list)
+    objective_ids: list[str] = Field(min_length=1)
     order: int
 
 
@@ -29,5 +29,5 @@ class CurriculumBlueprint(ArtifactBase):
     model_config = {"frozen": True, "extra": "forbid"}
 
     artifact_type: Literal["curriculum_blueprint"] = "curriculum_blueprint"
-    title: str = ""
+    title: str
     units: list[CurriculumUnit] = Field(default_factory=list)

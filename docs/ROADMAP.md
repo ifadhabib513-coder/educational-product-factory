@@ -34,14 +34,20 @@
 - Identity utilities: new_id(), compute_content_hash(), with_content_hash()
 - ArtifactBase with schema_version, id, artifact_type, status, created_at, content_hash, parent_id, generator, source_refs
 - GeneratorInfo (provider, model, prompt_version)
-- LearnerProfile (subject, level, goals, challenges, prior_knowledge, constraints) — fully subject-agnostic
+- LearnerProfile (subject, level, goals, challenges, prior_knowledge, constraints) — fully subject-agnostic, inherits ArtifactBase
 - ProductDefinition (title, subject, topic, level, problem_statement, learner_profile_id)
 - LearningObjective (statement, bloom_level, mastery_criteria) with BloomLevel enum
 - Prerequisite (prerequisite_objective_id, objective_id, rationale)
-- CurriculumUnit (unit_id, title, objective_ids, order) and CurriculumBlueprint
-- check_objective_references() validation function
+- CurriculumUnit (unit_id, title, objective_ids [min_length=1], order) and CurriculumBlueprint (required title)
+- check_objective_references() validation function (two-layer: schema guard + validation function)
 - ADR-002 documenting schema decisions
 - 39 tests passing
+
+**Repairs (post-commit):**
+- R1: Restored `Field(min_length=1)` on `CurriculumUnit.objective_ids`; test uses `model_construct()` to bypass Pydantic validation; ADR-002 documents two-layer design
+- R2: Made `CurriculumBlueprint.title` required (no default)
+- R3: Promoted `LearnerProfile` to inherit `ArtifactBase` (gains `id`, `created_at`); test determinism uses `model_copy()` instead of constructing twice; `_make_product` uses `profile.id`
+- R4: Narrowed exception assertions from `pytest.raises(Exception)` to `pytest.raises(ValidationError)`
 
 ## Stage 2b — Domain Schemas (Content Models)
 
