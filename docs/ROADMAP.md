@@ -49,19 +49,32 @@
 - R3: Promoted `LearnerProfile` to inherit `ArtifactBase` (gains `id`, `created_at`); test determinism uses `model_copy()` instead of constructing twice; `_make_product` uses `profile.id`
 - R4: Narrowed exception assertions from `pytest.raises(Exception)` to `pytest.raises(ValidationError)`
 
-## Stage 2b — Domain Schemas (Content Models)
+## Stage 2b-i — Domain Schemas (Content Models)
+
+**Status: COMPLETE**
+**Completed:** 2026-09-17
+
+- SolutionStep, SourceRef value objects (content.py)
+- Lesson (artifact_type="lesson") with objective_ids min_length=1
+- WorkedExample (artifact_type="worked_example") with solution_steps min_length=1
+- Misconception (artifact_type="misconception") with MisconceptionSeverity StrEnum
+- EvidenceRecord (artifact_type="evidence_record") with EvidenceKind StrEnum
+  - model_validator: direct_source requires source (no fabricated citations)
+  - model_generated is a first-class kind (honesty, not prohibition)
+- check_misconception_objective_refs() validation function
+- Refactored validation.py with _check_id_refs helper (check_objective_references signature unchanged)
+- ADR-003 documenting evidence taxonomy, source_refs vs source, two-layer validation scope
+- 56 tests passing
+
+## Stage 2b-ii — Domain Schemas (Practice, Assessment, Quality)
 
 **Status: PENDING**
 
-- Lesson
-- WorkedExample
-- Misconception
 - PracticeQuestion
 - Hint
 - AnswerKey
 - Rubric
 - Assessment
-- EvidenceRecord
 - VisualSpecification
 - QualityGateResult
 - VerificationResult
