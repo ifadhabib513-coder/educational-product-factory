@@ -43,4 +43,4 @@ Pre-alpha. Stage 1 complete (project foundation). See `docs/ROADMAP.md` for prog
 
 ## License
 
-MIT
+None granted. All rights reserved.
