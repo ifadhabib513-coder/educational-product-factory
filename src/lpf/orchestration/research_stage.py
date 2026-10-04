@@ -1,4 +1,4 @@
-"""Research stage — runs the real ResearchPipeline against injected providers.
+"""Research stage â€” runs the real ResearchPipeline against injected providers.
 
 The pipeline itself is production code (ADR-006/007); only the search providers
 are supplied by the caller. That is the point: the offline run exercises the real
@@ -9,12 +9,12 @@ Providers are injected rather than hardcoded so the stage has one code path. The
 default is the deterministic offline provider, which keeps ``lpf generate``
 reproducible and keeps the test suite offline. Passing live providers makes the
 run depend on network responses, so it is reproducible only given identical
-provider responses — the same property ADR-006 already claims for ranking.
+provider responses â€” the same property ADR-006 already claims for ranking.
 
 Normalisation note: ``ResearchPipeline.run`` stamps sources with
 ``datetime.now``. Those are the only nondeterministic values in the research
 stage, so this module rewrites them from the ``RunContext`` before hashing.
-Without this the run would not be reproducible — see ADR-008.
+Without this the run would not be reproducible â€” see ADR-008.
 """
 
 from __future__ import annotations
@@ -83,10 +83,7 @@ class DeterministicSearchProvider:
             source_id=self._ctx.id("source"),
             title=f"{query.rstrip('?')} (reference {rank + 1})",
             url=f"https://reference.example/{slug}/{rank + 1}",
-            snippet=(
-                f"{query.rstrip('?')} is defined here in plain language for the stated "
-                f"learner level, with one worked example and a note on the common mistake."
-            ),
+            snippet="The topic is covered in clear terms suitable for this learner level.",
             domain="reference.example",
             provider=SearchProvider.MOCK,
             retrieved_at=self._ctx.now(),
