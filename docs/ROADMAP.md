@@ -121,6 +121,7 @@
 - Byte-identical output across runs — COMPLETE (asserted in `tests/test_e2e_pipeline.py`)
 - `lpf generate` wired to the real pipeline — COMPLETE
 - Found and fixed 3 production defects on first integration run: nondeterministic `claim_id`, nondeterministic `QualityGate.checked_at`, and packaging before the run reached `complete`
+- Real sources reachable via `lpf generate --live-research` — COMPLETE (ADR-009)
 
 ## Stage 5 — Subject Adapter System
 
@@ -280,7 +281,7 @@ Define the Product Contract. Create ProductSpec as the source of truth.
 
 ## Phase 4 — Research Engine
 
-**Status: COMPLETE** (see ADR-006)
+**Status: COMPLETE** (see ADR-006, ADR-007, ADR-009)
 
 - Research pipeline: Search → Source collection → Classification → Evidence extraction → Claim mapping → Confidence — COMPLETE
 - ResearchItem schema — COMPLETE (SearchResult, VerifiedSource, EvidenceClaim, EvidenceMap, KnowledgeGap)
@@ -292,6 +293,9 @@ Define the Product Contract. Create ProductSpec as the source of truth.
 - Deterministic authority classifier with spoofing resistance — COMPLETE
 - Shared HTTP transport (retry, backoff, rate limiting) — COMPLETE
 - ResearchPipeline (dedupe → filter → rank → claims → conflicts → gaps → EvidenceMap) — COMPLETE
+- Provider injection seam (offline default, live providers opt-in) — COMPLETE (ADR-009)
+- Per-question relevance and confidence scoring — COMPLETE (ADR-009)
+- Intent-aware provider routing — PENDING (definitional queries still hit arXiv and correctly score as unsupported)
 
 ## Phase 5 — Syllabus & Knowledge Graph
 
@@ -500,10 +504,11 @@ ai-product-factory/
 
 ## Phase 26 — Testing Strategy
 
-**Status: PARTIAL** (671 tests passing, 96% coverage)
+**Status: PARTIAL** (681 tests passing, 96% coverage)
 
 - End-to-end offline pipeline tests — COMPLETE (stage machine, packaging, byte-identical determinism)
 - Failure-path tests — COMPLETE (QA failure aborts before packaging; domain errors returned as values; unexpected errors propagate)
+- Provider injection tests — COMPLETE (injection honoured; offline default preserved)
 - Live provider verification — arXiv ✅, Wikimedia ✅ (fixed 403), SearXNG requires self-hosting, Tavily pending API key
 - Derived relevance scoring for providers reporting no score — COMPLETE
 - Intent-conditioned ranking + audience fit — COMPLETE (see ADR-007)

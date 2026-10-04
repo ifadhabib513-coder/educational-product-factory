@@ -11,6 +11,7 @@ Neither is swallowed.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel
@@ -35,7 +36,9 @@ from lpf.orchestration.research_stage import ResearchBundle, build_research
 from lpf.orchestration.state import RunStage, RunState
 from lpf.orchestration.syllabus_stage import SyllabusBundle, build_syllabus
 from lpf.research.audience import AudienceLevel, classify_audience
+from lpf.research.providers.base import SearchProviderProto
 from lpf.schemas.discovery import DiscoveryInputs
+from lpf.schemas.research import SearchProvider
 
 
 @dataclass
@@ -64,10 +67,13 @@ class FactoryPipeline:
         output_dir: str = "projects",
         model: ModelProvider | None = None,
         audience: AudienceLevel | str | None = None,
+        research_providers: Mapping[SearchProvider, SearchProviderProto] | None = None,
     ) -> None:
         self._output_dir = output_dir
         self._model: ModelProvider = model or DeterministicMockModel()
         self._audience = classify_audience(audience) if audience is not None else None
+        #: None means "use the deterministic offline providers".
+        self._research_providers = research_providers
 
     async def run(
         self,
@@ -117,6 +123,7 @@ class FactoryPipeline:
                 research_questions=discovery.brief.research_questions,
                 topic=discovery.problem.subject,
                 audience=audience,
+                providers=self._research_providers,
             )
             research_artifacts = [research.plan, research.report, research.evidence_map]
             artifacts += research_artifacts

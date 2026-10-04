@@ -135,25 +135,25 @@ class TestPipelineDerivesRelevance:
 
     def test_zero_relevance_is_replaced_with_derived_score(self) -> None:
         pipe = self._pipeline()
-        derived = pipe._derive_relevance(self._results(0.0, 0.0), [self._question()])
+        derived = pipe._derive_relevance(self._results(0.0, 0.0), self._question().text)
         on_topic, off_topic = derived[0], derived[1]
         assert on_topic.relevance_score > 0.0
         assert off_topic.relevance_score == 0.0
 
     def test_relevant_result_outscores_irrelevant_one(self) -> None:
         pipe = self._pipeline()
-        derived = pipe._derive_relevance(self._results(0.0, 0.0), [self._question()])
+        derived = pipe._derive_relevance(self._results(0.0, 0.0), self._question().text)
         on_topic, off_topic = derived[0], derived[1]
         assert on_topic.relevance_score > off_topic.relevance_score
 
     def test_existing_provider_score_is_preserved(self) -> None:
         pipe = self._pipeline()
-        out = pipe._derive_relevance(self._results(0.9), [self._question()])
+        out = pipe._derive_relevance(self._results(0.9), self._question().text)
         assert out[0].relevance_score == 0.9
 
-    def test_no_questions_leaves_results_untouched(self) -> None:
+    def test_no_query_leaves_results_untouched(self) -> None:
         pipe = self._pipeline()
-        out = pipe._derive_relevance(self._results(0.0), [])
+        out = pipe._derive_relevance(self._results(0.0), "")
         assert out[0].relevance_score == 0.0
 
     @pytest.mark.parametrize(

@@ -11,7 +11,10 @@ from lpf import __version__
 from lpf.config import LpfConfig, load_config
 from lpf.logging_setup import setup_logging
 from lpf.orchestration.pipeline import FactoryPipeline
+from lpf.research.providers.arxiv import ArxivProvider
+from lpf.research.providers.wikimedia import WikimediaProvider
 from lpf.schemas.discovery import DiscoveryInputs
+from lpf.schemas.research import SearchProvider
 
 
 @click.group()
@@ -37,6 +40,12 @@ def main(ctx: click.Context) -> None:
     show_default=True,
     help="Run the deterministic offline pipeline (only mock is implemented).",
 )
+@click.option(
+    "--live-research",
+    is_flag=True,
+    default=False,
+    help="Search real sources via arXiv and Wikimedia instead of the offline provider.",
+)
 @click.pass_context
 def generate(
     ctx: click.Context,
@@ -46,6 +55,7 @@ def generate(
     run_id: str,
     seed: str,
     mock: bool,
+    live_research: bool,
 ) -> None:
     """Generate an educational product for a subject and topic."""
     config: LpfConfig = ctx.obj["config"]
@@ -61,10 +71,25 @@ def generate(
         level=level,
     )
 
+    research_providers = None
+    if live_research:
+        research_providers = {
+            SearchProvider.ARXIV: ArxivProvider(),
+            SearchProvider.WIKIMEDIA: WikimediaProvider(),
+        }
+
     click.echo(f"Generating product: subject={subject}, topic={topic}, level={level}")
     click.echo(f"Output directory: {config.output_dir}")
+    click.echo(
+        "Research providers: "
+        + (
+            ", ".join(sorted(provider.value for provider in research_providers))
+            if research_providers
+            else "mock (deterministic, offline)"
+        )
+    )
 
-    pipeline = FactoryPipeline(output_dir=config.output_dir)
+    pipeline = FactoryPipeline(output_dir=config.output_dir, research_providers=research_providers)
     result = asyncio.run(pipeline.run(inputs, run_id=run_id, seed=seed))
 
     if not result.succeeded:

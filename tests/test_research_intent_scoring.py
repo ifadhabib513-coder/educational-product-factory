@@ -37,6 +37,7 @@ from lpf.research.scoring import (
     date_span,
     freshness,
     has_definition_cue,
+    has_exact_title,
     intent_match,
     ranking_score,
     specialist_density,
@@ -293,6 +294,56 @@ class TestIntentMatch:
         spec = self._result("Linear maps", SPECIALIST_TEXT)
         assert intent_match(intro, query, QueryIntent.ACADEMIC_LITERATURE) >= 0.0
         assert intent_match(spec, query, QueryIntent.ACADEMIC_LITERATURE) >= 0.0
+
+    def test_exact_title_separates_canonical_from_narrow_subtopic(self) -> None:
+        """Fixes the live failure where 'Basic Linear Algebra Subprograms' beat 'Linear algebra'.
+
+        Both sources have 1.0 token coverage and definition cues. The exact-title
+        signal ensures the canonical topic outranks the narrow subtopic.
+        """
+        query = "What is linear algebra?"
+        canonical = self._result("Linear algebra", DEFINITIONAL_TEXT)
+        subtopic = self._result(
+            "Basic Linear Algebra Subprograms",
+            "Basic Linear Algebra Subprograms is a specification that defines standard routines.",
+        )
+        assert intent_match(canonical, query, QueryIntent.DEFINITIONAL) > intent_match(
+            subtopic, query, QueryIntent.DEFINITIONAL
+        )
+
+
+class TestExactTitleMatch:
+    @pytest.mark.parametrize(
+        ("query", "title"),
+        [
+            ("What is linear algebra?", "Linear algebra"),
+            ("What is linear algebra?", "Linear Algebra"),
+            ("What is linear algebra?", "linear algebra"),
+            ("What is entropy?", "Entropy"),
+            ("What is entropy?", "Entropy (information theory)"),
+            ("Define photosynthesis", "Photosynthesis"),
+            ("Explain machine learning", "Machine learning"),
+            ("Introduction to calculus", "Calculus"),
+            ("What are eigenvalues?", "Eigenvalues"),
+            ("Linear algebra", "Linear algebra"),
+        ],
+    )
+    def test_detects_canonical_title_match(self, query: str, title: str) -> None:
+        assert has_exact_title(query, title) is True
+
+    @pytest.mark.parametrize(
+        ("query", "title"),
+        [
+            ("What is linear algebra?", "Basic Linear Algebra Subprograms"),
+            ("What is linear algebra?", "Non-linear positive maps between C*-algebras"),
+            ("What is linear algebra?", "Numerical Linear Algebra with Applications"),
+            ("What is entropy?", "Maximum entropy spectral estimation"),
+            ("Define photosynthesis", "Artificial photosynthesis in nanostructures"),
+            ("What is cooking?", "Linear algebra"),
+        ],
+    )
+    def test_rejects_subtopics_and_non_canonical_titles(self, query: str, title: str) -> None:
+        assert has_exact_title(query, title) is False
 
 
 class TestClarityAndDensity:

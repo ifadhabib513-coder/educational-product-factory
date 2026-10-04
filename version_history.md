@@ -20,6 +20,58 @@ where the project stands.
 
 ---
 
+## v0.7.0 — Live Research and Per-Question Scoring
+
+### Introduction
+The pipeline was reproducible but entirely fictional: the research stage
+hardcoded a mock provider, so a product's evidence was invented text. This
+version makes the research stage real — and, in the process, exposed a scoring
+defect that 681 unit tests had missed.
+
+### Goal
+Let the factory build its evidence from real sources, and fix the scoring bug
+that only real data could reveal.
+
+### Features & Benefits
+- **A provider injection seam.** The research stage no longer constructs its own
+  provider. Callers inject any set; the offline provider remains the default, so
+  `lpf generate` stays reproducible and the test suite stays network-free.
+- **`lpf generate --live-research`** retrieves from arXiv and Wikimedia through
+  the same plan builder, the same `ResearchPipeline`, and the same ranking. Real
+  evidence, mock prose — a legitimate pairing that is strictly better than
+  invented evidence.
+- **Per-question relevance and confidence.** A source is now scored against the
+  question it was actually retrieved for, instead of against every question in
+  the run joined into one string.
+- **Live verification** through the full pipeline: 52 real sources
+  (30 arXiv, 22 Wikipedia), conflicts down from 8 to 2.
+
+### Gaps It Covers
+- A research stage with no seam, so live providers were impossible.
+- A genuine correctness bug in production ranking: lexical coverage diluted by
+  unrelated questions. Live, it cost the correct source 0.25 confidence
+  (1.0 → 0.746) and left *Sanskrit* as indistinguishable from a real article.
+- Off-topic sources flagged `relevant=False` 52 times out of 52 — the flag
+  recorded nothing useful.
+
+### Gaps Still Remaining
+- **Provider selection is not intent-aware.** Every question goes to every
+  provider, so a beginner's definitional query retrieved 30 arXiv preprints that
+  are *correctly* unsupported rather than absent. Routing by intent is the clear
+  next step.
+- **Lesson prose is still mock.** This version made the evidence real, not the
+  writing.
+- **Live runs are not byte-reproducible** — they depend on network responses.
+  The guarantee holds for identical provider responses.
+- **arXiv search is loose**; tangential preprints are not filtered by field.
+- Tavily remains unverified (no API key); SearXNG still requires self-hosting.
+
+### Next Version
+v0.8.0 routes each question to the providers that can actually satisfy it, so
+retrieval effort is not spent on sources the scorer will reject by design.
+
+---
+
 ## v0.6.0 — Deterministic Offline Pipeline (Mock End-to-End)
 
 ### Introduction
@@ -84,9 +136,8 @@ whose central claim is reproducibility.
 - The exact-title definitional signal from v0.5.0 remains outstanding.
 
 ### Next Version
-v0.7.0 adds the exact-title definitional signal and moves toward real content
-generation behind the live-provider layer, so the pipeline stops shipping canned
-prose.
+v0.7.0 replaced the canned research with real arXiv and Wikimedia sources behind a
+provider injection seam.
 
 ---
 
@@ -316,15 +367,14 @@ v0.2.0 built the shared infrastructure.
 
 ## Current Status
 
-**v0.6.0 is complete and verified.** The stages from Discovery through Packaging
-run as one offline pipeline and produce byte-identical output across runs. The
-research stage retrieves, scores, ranks, and builds evidence maps for the right
-audience; `lpf generate` now writes a real product.
+**v0.7.0 is complete and verified.** The stages from Discovery through Packaging
+run as one pipeline; `lpf generate --live-research` builds its evidence from real
+arXiv and Wikimedia sources through the same ranking engine that is verified
+against live services.
 
-**The product does not yet exist end to end.** A product is generated, but its
-content is canned mock prose, its provider layer has no live implementation wired
-in, its stage machine does not loop (no self-correction or revision), and its
-output is Markdown/JSON rather than a rendered book. What exists so far is the
-spine — reproducible, auditable, and wired — plus the part of the factory most
-likely to be got quietly wrong, how sources are chosen, built deliberately and
-verified against live services.
+**The product still does not exist end to end.** Its evidence is real but its
+prose is still mock — the writing is the last major fiction. Retrieval is also
+unrefined: questions are sent to every provider regardless of intent, so a
+beginner's definitional query still retrieves preprints that the scorer rejects
+by design. The stage machine does not loop, and output is Markdown/JSON rather
+than a rendered book.

@@ -1,24 +1,32 @@
-"""Research stage — runs the real ResearchPipeline against a deterministic provider.
+"""Research stage — runs the real ResearchPipeline against injected providers.
 
-The pipeline itself is production code (ADR-006/007); only the search provider is
-swapped for an offline one. That is the point: the offline run exercises the real
-dedupe, filter, rank, claim, conflict and evidence-map logic end to end.
+The pipeline itself is production code (ADR-006/007); only the search providers
+are supplied by the caller. That is the point: the offline run exercises the real
+dedupe, filter, rank, claim, conflict and evidence-map logic end to end, and the
+same stage serves live arXiv/Wikimedia without any change here.
 
-Normalisation note: ``ResearchPipeline.run`` stamps report and evidence-map ids
-with ``uuid4`` and sources with ``datetime.now``. Those are the only two
-nondeterministic values in the whole research stage, so this module rewrites them
-from the ``RunContext`` before hashing. Without this the run would not be
-reproducible — see ADR-008.
+Providers are injected rather than hardcoded so the stage has one code path. The
+default is the deterministic offline provider, which keeps ``lpf generate``
+reproducible and keeps the test suite offline. Passing live providers makes the
+run depend on network responses, so it is reproducible only given identical
+provider responses — the same property ADR-006 already claims for ranking.
+
+Normalisation note: ``ResearchPipeline.run`` stamps sources with
+``datetime.now``. Those are the only nondeterministic values in the research
+stage, so this module rewrites them from the ``RunContext`` before hashing.
+Without this the run would not be reproducible — see ADR-008.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from lpf.domain.identity import with_content_hash
 from lpf.orchestration.context import RunContext
 from lpf.research.audience import AudienceLevel
 from lpf.research.pipeline import PipelineConfig, PipelineResult, ResearchPipeline
+from lpf.research.providers.base import SearchProviderProto
 from lpf.research.router import ResearchRouter
 from lpf.research.service import ResearchService
 from lpf.schemas.research import (
@@ -87,9 +95,19 @@ class DeterministicSearchProvider:
         )
 
 
+def default_providers(ctx: RunContext) -> dict[SearchProvider, SearchProviderProto]:
+    """The offline provider set: deterministic, network-free, reproducible."""
+    return {SearchProvider.MOCK: DeterministicSearchProvider(ctx)}
+
+
 def _build_plan(
-    ctx: RunContext, product_spec_id: str, questions_text: list[str], topic: str
+    ctx: RunContext,
+    product_spec_id: str,
+    questions_text: list[str],
+    topic: str,
+    provider_names: list[SearchProvider],
 ) -> ResearchPlan:
+    """Build a plan that queries every injected provider once per question."""
     questions = [
         ResearchQuestion(
             question_id=ctx.id("rq"),
@@ -97,8 +115,8 @@ def _build_plan(
             topic=topic,
             strategy=SearchStrategy(
                 use_web=True,
-                providers=[SearchProvider.MOCK],
-                queries=[SearchQuery(query=text, provider=SearchProvider.MOCK)],
+                providers=list(provider_names),
+                queries=[SearchQuery(query=text, provider=name) for name in provider_names],
             ),
         )
         for text in questions_text
@@ -149,12 +167,18 @@ async def build_research(
     research_questions: list[str],
     topic: str,
     audience: AudienceLevel = AudienceLevel.INTERMEDIATE,
+    providers: Mapping[SearchProvider, SearchProviderProto] | None = None,
 ) -> ResearchBundle:
-    """Run the real research pipeline over the deterministic offline provider."""
-    plan = _build_plan(ctx, product_spec_id, research_questions, topic)
+    """Run the real research pipeline over the injected providers.
 
-    provider = DeterministicSearchProvider(ctx)
-    service = ResearchService(ResearchRouter(providers={SearchProvider.MOCK: provider}))
+    With no ``providers`` the stage uses the deterministic offline provider, so
+    the default run is reproducible and offline. Passing live providers routes the
+    same stage, the same plan, and the same ranking over real search results.
+    """
+    resolved = dict(providers) if providers is not None else default_providers(ctx)
+    plan = _build_plan(ctx, product_spec_id, research_questions, topic, list(resolved))
+
+    service = ResearchService(ResearchRouter(providers=resolved))
     pipeline = ResearchPipeline(service, PipelineConfig(audience_level=audience))
 
     result: PipelineResult = await pipeline.run(

@@ -115,6 +115,8 @@ class ResearchPipeline:
         #: reports. Without a run id, ids fall back to uuid4.
         self._run_id: str | None = None
         self._claim_seq = 0
+        #: source_id -> the question text that result was retrieved for.
+        self._query_by_source: dict[str, str] = {}
 
     def _claim_id(self) -> str:
         """Deterministic claim id when running under a run id, else a uuid."""
@@ -156,10 +158,19 @@ class ResearchPipeline:
 
         self._intent = self.resolve_intent(questions)
         self._query = " ".join(q.text for q in questions)
+        self._query_by_source = {}
+
+        # Each result keeps the question it was retrieved for. Intent stays
+        # run-level (one intent per run, so ranking does not depend on question
+        # order), but lexical relevance and confidence are per-result.
+        question_text_by_id = {question.question_id: question.text for question in questions}
 
         collected: list[SearchResult] = []
-        for results in raw_by_question.values():
-            collected.extend(self._derive_relevance(results, questions))
+        for question_id, results in raw_by_question.items():
+            question_text = question_text_by_id.get(question_id, self._query)
+            for result in self._derive_relevance(results, question_text):
+                self._query_by_source[result.source_id] = question_text
+                collected.append(result)
 
         self._oldest, self._newest = date_span(collected)
 
@@ -247,7 +258,7 @@ class ResearchPipeline:
     @staticmethod
     def _derive_relevance(
         results: list[SearchResult],
-        questions: list[ResearchQuestion],
+        query: str,
     ) -> list[SearchResult]:
         """Fill in relevance for providers that report none.
 
@@ -255,11 +266,12 @@ class ResearchPipeline:
         ``relevance_score`` at 0.0. Without this, claim confidence for those
         providers could never exceed ``authority_weight`` and every real report
         produced an empty EvidenceMap. See ``research/relevance.py``.
-        """
-        if not questions:
-            return results
 
-        query = " ".join(q.text for q in questions)
+        ``query`` is the single question the results were retrieved for, so the
+        lexical comparison is not diluted by unrelated questions in the run.
+        """
+        if not query:
+            return results
 
         return [
             result
@@ -294,12 +306,21 @@ class ResearchPipeline:
 
         return ranking_score(
             result,
-            query=self._query,
+            query=self._query_for(result),
             intent=self._intent,
             audience=self._config.audience_level,
             oldest=self._oldest,
             newest=self._newest,
         )
+
+    def _query_for(self, result: SearchResult) -> str:
+        """The question this result was actually retrieved for.
+
+        Scoring against the whole question list dilutes lexical coverage: a source
+        answering "What is linear algebra?" was judged against every other
+        question too, so a correct source scored below the support threshold.
+        """
+        return self._query_by_source.get(result.source_id, self._query)
 
     def _verify(self, result: SearchResult) -> VerifiedSource | None:
         """Build a VerifiedSource, marking unverified results rather than dropping them.
@@ -340,7 +361,9 @@ class ResearchPipeline:
             if self._intent is None:
                 confidence = round(min(1.0, self._score(result)), 4)
             else:
-                confidence = confidence_for(result, query=self._query, intent=self._intent)
+                confidence = confidence_for(
+                    result, query=self._query_for(result), intent=self._intent
+                )
 
             claims.append(
                 EvidenceClaim(

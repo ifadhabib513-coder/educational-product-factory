@@ -656,3 +656,82 @@ class TestDeterminism:
         first = await _pipeline(list(results)).run("spec1", [_question()])
         second = await _pipeline(list(results)).run("spec1", [_question()])
         assert first.report.claims[0].confidence == second.report.claims[0].confidence
+
+
+# ---------------------------------------------------------------------------
+
+
+class TestQuestionsAreScoredIndividually:
+    """A result must be scored against the question it was retrieved for.
+
+    Live testing against arXiv and Wikimedia exposed this: the pipeline joined
+    every question in a run into one query string and scored each source against
+    that concatenation. Lexical coverage was diluted by unrelated questions, so a
+    correct source retrieved for one question fell below the 0.7 support
+    threshold purely because other questions existed in the same run. A live run
+    produced 2 supported claims out of 52; the correct Wikipedia article scored
+    0.746 instead of 1.0.
+    """
+
+    class _EchoProvider:
+        """Returns one on-topic, unscored result per query."""
+
+        provider_name = SearchProvider.MOCK
+
+        async def search(self, query: str, *, max_results: int = 10) -> list[SearchResult]:
+            topic = query.rstrip("?")
+            slug = topic.lower().replace(" ", "-")[:30]
+            return [
+                SearchResult(
+                    source_id=f"s-{slug}",
+                    title=topic,
+                    url=f"https://example.org/{slug}",
+                    snippet=(
+                        f"{topic} is defined here in plain language for the learner, "
+                        "with one worked example."
+                    ),
+                    domain="example.org",
+                    provider=SearchProvider.MOCK,
+                    authority=SourceAuthority.SECONDARY,
+                    relevance_score=0.0,
+                )
+            ]
+
+        async def extract(self, url: str) -> str:
+            return ""
+
+    QUESTIONS = (
+        ("q1", "What is linear algebra?"),
+        ("q2", "What is machine learning?"),
+        ("q3", "What is the Roman Republic?"),
+    )
+
+    def _pipeline(self):
+        router = ResearchRouter(providers={SearchProvider.MOCK: self._EchoProvider()})
+        return ResearchPipeline(ResearchService(router), PipelineConfig())
+
+    def _questions(self):
+        return [_question(qid, text) for qid, text in self.QUESTIONS]
+
+    @pytest.mark.asyncio
+    async def test_each_result_keeps_its_own_question(self) -> None:
+        pipeline = self._pipeline()
+        outcome = await pipeline.run("spec1", self._questions())
+        for result in outcome.results:
+            assert pipeline._query_for(result) in [text for _, text in self.QUESTIONS]
+
+    @pytest.mark.asyncio
+    async def test_relevance_is_not_diluted_by_other_questions(self) -> None:
+        pipeline = self._pipeline()
+        outcome = await pipeline.run("spec1", self._questions())
+        assert all(result.relevance_score >= 0.5 for result in outcome.results)
+
+    @pytest.mark.asyncio
+    async def test_every_on_topic_source_reaches_the_support_threshold(self) -> None:
+        """The live symptom: a correct source scored below 0.7 because the run
+        contained other questions."""
+        pipeline = self._pipeline()
+        outcome = await pipeline.run("spec1", self._questions())
+        evidence_map = pipeline.to_evidence_map(outcome.report)
+        assert evidence_map.total_claims == len(self.QUESTIONS)
+        assert evidence_map.supported_claims == len(self.QUESTIONS)

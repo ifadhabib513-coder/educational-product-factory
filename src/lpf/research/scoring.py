@@ -30,7 +30,7 @@ from typing import Final
 from lpf.research.audience import AudienceLevel
 from lpf.research.audience import audience_fit as _audience_fit
 from lpf.research.intent import QueryIntent, authority_fit, ranking_weights
-from lpf.research.relevance import lexical_relevance
+from lpf.research.relevance import lexical_relevance, tokenize
 from lpf.schemas.research import SearchResult, SourceAuthority
 
 # Phrases that mark a passage as *defining* or *explaining* its topic rather
@@ -89,10 +89,14 @@ _DENSITY_MARKERS: Final = (
     "we show that",
 )
 
-# Weight given to lexical coverage within ``intent_match``; the remainder goes to
-# the intent-specific cue. Coverage alone cannot separate a definitional article
-# from a specialist paper that mentions the same terms.
-_COVERAGE_WEIGHT: Final = 0.6
+# Weights given to lexical coverage, definition cue, and exact-title match within
+# ``intent_match`` for definitional and explanatory queries.
+# Coverage alone cannot separate a definitional article from a specialist paper
+# mentioning the same terms, and cue alone cannot separate a canonical article from
+# a narrow subtopic (e.g. 'Basic Linear Algebra Subprograms' vs 'Linear algebra').
+_COVERAGE_WEIGHT: Final = 0.50
+_CUE_WEIGHT: Final = 0.30
+_EXACT_TITLE_WEIGHT: Final = 0.20
 
 _SENTENCE_SPLIT: Final = re.compile(r"[.!?]+")
 _WORD: Final = re.compile(r"[A-Za-z']+")
@@ -100,6 +104,62 @@ _WORD: Final = re.compile(r"[A-Za-z']+")
 # Average words per sentence that reads comfortably. Used as a soft target
 # rather than a hard cutoff, since terse entries can also be well written.
 _IDEAL_SENTENCE_WORDS: Final = 18.0
+
+_QUERY_INTENT_PREFIX: Final = re.compile(
+    r"^(what\s+(is|are|was|were)(\s+a|\s+an|\s+the)?|"
+    r"define(\s+the)?|"
+    r"definition\s+of(\s+the)?|"
+    r"meaning\s+of(\s+the)?|"
+    r"introduction\s+to(\s+the)?|"
+    r"explain(\s+the)?|"
+    r"overview\s+of(\s+the)?)\s+",
+    re.IGNORECASE,
+)
+_PARENTHETICAL: Final = re.compile(r"\(.*?\)")
+
+
+def clean_title_for_matching(title: str) -> str:
+    """Strip parenthetical disambiguation or context from a title.
+
+    For example, 'Entropy (information theory)' -> 'Entropy'.
+    """
+    return _PARENTHETICAL.sub("", title).strip()
+
+
+def extract_query_topic(query: str) -> str:
+    """Strip common question/intent framing prefixes from a query to extract core topic.
+
+    For example, 'What is linear algebra?' -> 'linear algebra'.
+    """
+    topic = query.strip().rstrip("?.!")
+    return _QUERY_INTENT_PREFIX.sub("", topic).strip()
+
+
+def has_exact_title(query: str, title: str) -> bool:
+    """True when the document title exactly matches the core topic of the query.
+
+    Canonical encyclopedia and textbook entries have titles that name the topic
+    directly (e.g. 'Linear algebra'), whereas subtopics or tangential articles
+    add qualifiers (e.g. 'Basic Linear Algebra Subprograms').
+    """
+    cleaned_title = clean_title_for_matching(title)
+    if not cleaned_title:
+        return False
+
+    topic = extract_query_topic(query)
+    if topic and cleaned_title.lower() == topic.lower():
+        return True
+
+    topic_terms = tokenize(topic) if topic else set()
+    query_terms = tokenize(query)
+    title_terms = tokenize(cleaned_title)
+
+    if not title_terms:
+        return False
+
+    if topic_terms and title_terms == topic_terms:
+        return True
+    return bool(query_terms and title_terms == query_terms)
 
 
 def has_definition_cue(title: str, snippet: str) -> bool:
@@ -111,11 +171,11 @@ def has_definition_cue(title: str, snippet: str) -> bool:
 def intent_match(result: SearchResult, query: str, intent: QueryIntent) -> float:
     """How well a source answers the question that was asked.
 
-    Blends lexical coverage with a definition-cue signal. The two are combined
-    by weighted average rather than by adding a bonus: an additive bonus
-    saturates, because a source that already covers every query term scores
-    1.0 and stays 1.0 no matter what is added. That made a specialist paper and
-    a definitional article tie at exactly 1.0.
+    Blends lexical coverage with definition-cue and exact-title signals. The
+    signals are combined by weighted average rather than by adding a bonus: an
+    additive bonus saturates, because a source that already covers every query
+    term scores 1.0 and stays 1.0 no matter what is added. That made a
+    specialist paper and a definitional article tie at exactly 1.0.
     """
     coverage = lexical_relevance(query, result.title, result.snippet)
     if coverage <= 0.0:
@@ -123,7 +183,11 @@ def intent_match(result: SearchResult, query: str, intent: QueryIntent) -> float
 
     if intent in (QueryIntent.DEFINITIONAL, QueryIntent.EXPLANATORY):
         cue = 1.0 if has_definition_cue(result.title, result.snippet) else 0.0
-        return round(_COVERAGE_WEIGHT * coverage + (1.0 - _COVERAGE_WEIGHT) * cue, 4)
+        exact = 1.0 if has_exact_title(query, result.title) else 0.0
+        return round(
+            _COVERAGE_WEIGHT * coverage + _CUE_WEIGHT * cue + _EXACT_TITLE_WEIGHT * exact,
+            4,
+        )
 
     if intent is QueryIntent.PROCEDURAL:
         steps = (
@@ -288,6 +352,7 @@ __all__ = [
     "date_span",
     "freshness",
     "has_definition_cue",
+    "has_exact_title",
     "intent_match",
     "ranking_score",
     "specialist_density",
