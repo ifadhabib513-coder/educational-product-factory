@@ -110,6 +110,24 @@ class ResearchPipeline:
         self._query = ""
         self._newest = 0.0
         self._oldest = 0.0
+        #: When a run id is supplied, generated ids become deterministic
+        #: (``<run_id>-claim-0001``) so two identical runs produce identical
+        #: reports. Without a run id, ids fall back to uuid4.
+        self._run_id: str | None = None
+        self._claim_seq = 0
+
+    def _claim_id(self) -> str:
+        """Deterministic claim id when running under a run id, else a uuid."""
+        self._claim_seq += 1
+        if self._run_id is not None:
+            return f"{self._run_id}-claim-{self._claim_seq:04d}"
+        return new_id()
+
+    def _scoped_id(self, kind: str) -> str:
+        """Deterministic single-instance id when running under a run id."""
+        if self._run_id is not None:
+            return f"{self._run_id}-{kind}-0001"
+        return new_id()
 
     def resolve_intent(self, questions: list[ResearchQuestion]) -> QueryIntent:
         """Intent for this run: an override, else the first classified question.
@@ -132,6 +150,8 @@ class ResearchPipeline:
         run_id: str | None = None,
     ) -> PipelineResult:
         """Execute searches for ``questions`` and build a ResearchReport."""
+        self._run_id = run_id
+        self._claim_seq = 0
         raw_by_question = await self._service.execute_plan_questions(questions)
 
         self._intent = self.resolve_intent(questions)
@@ -153,7 +173,7 @@ class ResearchPipeline:
         gaps = self.identify_gaps(questions, raw_by_question)
 
         report = ResearchReport(
-            id=new_id(),
+            id=self._scoped_id("research_report"),
             product_spec_id=product_spec_id,
             claims=claims,
             verified_sources=[v for v in verified if v is not None],
@@ -324,7 +344,7 @@ class ResearchPipeline:
 
             claims.append(
                 EvidenceClaim(
-                    claim_id=new_id(),
+                    claim_id=self._claim_id(),
                     claim=result.snippet.strip(),
                     source_ids=[result.source_id],
                     evidence_text=result.snippet.strip(),
@@ -417,7 +437,7 @@ class ResearchPipeline:
         conflicting_ids = {cid for c in report.conflicts for cid in c.claim_ids}
 
         return EvidenceMap(
-            id=new_id(),
+            id=self._scoped_id("evidence_map"),
             research_report_id=report.id,
             claims=report.claims,
             total_claims=len(report.claims),
