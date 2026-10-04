@@ -20,6 +20,76 @@ where the project stands.
 
 ---
 
+## v0.6.0 — Deterministic Offline Pipeline (Mock End-to-End)
+
+### Introduction
+The stages had never run together. Discovery, specification, research, syllabus,
+content, assessment, QA, and packaging each worked in isolation, and a
+per-module test suite cannot catch a disagreement *between* modules. This version
+wires them into one offline pipeline and, in doing so, found three real
+integration defects on the very first run.
+
+### Goal
+Prove the whole spine runs end to end and that two runs with the same inputs
+produce byte-identical output — the only demonstration that matters for a factory
+whose central claim is reproducibility.
+
+### Features & Benefits
+- **A linear stage machine.** `created → discovery → specification → research →
+  syllabus → content → assessment → qa → packaging → complete`, with `failed`
+  reachable from every non-terminal stage. Illegal transitions raise
+  `ILLEGAL_TRANSITION`, making out-of-order and silently-skipped stages impossible
+  by construction.
+- **A deterministic `RunContext`.** Artifact ids become
+  `<run_id>-<kind>-<n>` (numbered per kind) and timestamps advance one second per
+  call from a fixed epoch, so ids and `created_at` ordering are stable across
+  runs. `uuid4` and `datetime.now()` are never used directly.
+- **An event log as audit trail.** Every stage start and completion, plus
+  run start, completion, and failure, is written to `run_log.json`.
+- **The model isolated behind `ModelProvider`.** A deterministic mock supplies
+  lesson prose — the one place a model is genuinely required. Every decision that
+  has to be *right* is made by deterministic code.
+- **The real research engine, offline.** Only the search provider is swapped; the
+  genuine dedupe, filter, rank, claim, conflict, and evidence-map logic runs end
+  to end.
+- **QA gates that delegate to the real validators**, plus curriculum-coverage and
+  evidence gates. A `failed` verdict aborts the run before packaging.
+- **Working packaging.** `lpf generate` now writes `manifest.json`,
+  `run_log.json`, `product.md`, and one JSON file per artifact under
+  `projects/<run_id>/`.
+- **Three production defects fixed at the source:**
+  - `ResearchPipeline` generated a fresh `uuid4` `claim_id` per claim and ignored
+    the `run_id` it already accepted. It now uses it.
+  - `QualityGate.checked_at` defaulted to `datetime.now()`.
+  - Packaging ran *before* the run reached `complete`, so the manifest recorded
+    the run as still `packaging` and the run log omitted `run_completed`.
+
+### Gaps It Covers
+- No end-to-end path: the stages existed but had never been composed.
+- A `lpf generate` command that printed `Not yet implemented`.
+- No proof of reproducibility — the project's core claim was untested.
+- Three latent defects that only an integration run could reveal.
+
+### Gaps Still Remaining
+- The stage machine is linear: no retry, no repair, no revision loop. The
+  Revision crew will require cycles.
+- Mock content is canned placeholder prose. It proves the wiring, not the
+  pedagogy.
+- The mock's canned sentences share bucket words, so the conflict detector
+  reports eight spurious conflicts.
+- Only the mock provider is wired; live providers are not selectable yet.
+- Package output is Markdown and JSON only — no HTML, PDF, or ZIP bundle.
+- Four of the ten planned hard gates (factual, numerical/symbolic, linguistic,
+  rendering) are not implemented.
+- The exact-title definitional signal from v0.5.0 remains outstanding.
+
+### Next Version
+v0.7.0 adds the exact-title definitional signal and moves toward real content
+generation behind the live-provider layer, so the pipeline stops shipping canned
+prose.
+
+---
+
 ## v0.5.0 — Intent-Conditioned Ranking and Audience Fit
 
 ### Introduction
@@ -71,8 +141,8 @@ without emptying the evidence map in the process.
   *why* a claim was marked unsupported.
 
 ### Next Version
-v0.6.0 adds the exact-title definitional signal, and begins Phase 5 syllabus and
-knowledge-graph construction on top of the now-audience-aware research layer.
+v0.6.0 wired the stages into a deterministic end-to-end pipeline (the exact-title
+definitional signal remains outstanding and is carried to v0.7.0).
 
 ---
 
@@ -246,11 +316,15 @@ v0.2.0 built the shared infrastructure.
 
 ## Current Status
 
-**v0.5.0 is complete and verified.** The research stage retrieves, scores,
-ranks, and builds evidence maps for the right audience.
+**v0.6.0 is complete and verified.** The stages from Discovery through Packaging
+run as one offline pipeline and produce byte-identical output across runs. The
+research stage retrieves, scores, ranks, and builds evidence maps for the right
+audience; `lpf generate` now writes a real product.
 
-**The product does not yet exist end to end.** The stages from Discovery through
-Packaging remain contracts rather than a wired LangGraph workflow, and no
-learner-facing product has been generated. What exists so far is the part of the
-factory most likely to be got quietly wrong — how sources are chosen — built
-first, deliberately, and verified against live services.
+**The product does not yet exist end to end.** A product is generated, but its
+content is canned mock prose, its provider layer has no live implementation wired
+in, its stage machine does not loop (no self-correction or revision), and its
+output is Markdown/JSON rather than a rendered book. What exists so far is the
+spine — reproducible, auditable, and wired — plus the part of the factory most
+likely to be got quietly wrong, how sources are chosen, built deliberately and
+verified against live services.

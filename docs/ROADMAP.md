@@ -102,22 +102,25 @@
 
 ## Stage 3 — Workflow Engine
 
-**Status: PENDING**
+**Status: PARTIAL** (see ADR-008)
 
-- Workflow state machine
-- Legal transitions
-- Events
-- Persistence abstraction
-- Failure handling
-- Retry and repair
+- Workflow state machine — COMPLETE (`orchestration/state.py`, linear stage machine)
+- Legal transitions — COMPLETE (`ILLEGAL_TRANSITION` on illegal advance)
+- Events — COMPLETE (`orchestration/events.py`, `run_log.json`)
+- Failure handling — COMPLETE (`LpfError` → failed run value; unexpected errors propagate)
+- Persistence abstraction — PENDING (filesystem only; no DB/memory store yet)
+- Retry and repair — PENDING (no revision loop; the machine is linear by design)
 
 ## Stage 4 — Mock End-to-End Pipeline
 
-**Status: PENDING**
+**Status: COMPLETE** (see ADR-008)
 
-- Deterministic demo using mock data and mock LLM
-- Must generate all core artifacts end-to-end
-- No real LLM integration until this works
+- Deterministic demo using mock data and mock LLM — COMPLETE (`FactoryPipeline`)
+- Must generate all core artifacts end-to-end — COMPLETE (23 artifacts: discovery → specification → research → syllabus → content → assessment → QA → packaging)
+- No real LLM integration until this works — upheld (only the mock provider is wired)
+- Byte-identical output across runs — COMPLETE (asserted in `tests/test_e2e_pipeline.py`)
+- `lpf generate` wired to the real pipeline — COMPLETE
+- Found and fixed 3 production defects on first integration run: nondeterministic `claim_id`, nondeterministic `QualityGate.checked_at`, and packaging before the run reached `complete`
 
 ## Stage 5 — Subject Adapter System
 
@@ -340,11 +343,15 @@ Define the Product Contract. Create ProductSpec as the source of truth.
 
 ## Phase 11 — Quality Gate System
 
-**Status: PENDING** (GateStatus, VerificationResult schemas exist)
+**Status: PARTIAL** (gate runner implemented in the offline pipeline; see ADR-008)
 
-- 10 hard gates: Schema validity, Research validity, Curriculum completeness, Factual accuracy, Mathematical correctness, Exercise-answer consistency, Learning objective coverage, Internal consistency, Citation coverage, Rendering validity
-- BUILD FAILED on critical failure
-- GateStatus enum (passed/failed/warning/skipped/not_applicable)
+- Gate runner delegating to real validators — COMPLETE (`orchestration/qa_stage.py`)
+- Curriculum completeness gate (every objective covered) — COMPLETE
+- Research/evidence gate (at least one supported claim) — COMPLETE
+- Required-gates presence check — COMPLETE
+- BUILD FAILED on critical failure — COMPLETE (a `failed` verdict aborts before packaging)
+- 10 hard gates: Schema validity, Research validity, Curriculum completeness, Factual accuracy, Mathematical correctness, Exercise-answer consistency, Learning objective coverage, Internal consistency, Citation coverage, Rendering validity — 6 of 10 wired; factual/numerical/linguistic/rendering gates PENDING
+- GateStatus enum (passed/failed/warning/skipped/not_applicable) — COMPLETE
 
 ## Phase 12 — Self-Correction Loop
 
@@ -493,8 +500,10 @@ ai-product-factory/
 
 ## Phase 26 — Testing Strategy
 
-**Status: PARTIAL** (644 tests passing, 96% coverage)
+**Status: PARTIAL** (671 tests passing, 96% coverage)
 
+- End-to-end offline pipeline tests — COMPLETE (stage machine, packaging, byte-identical determinism)
+- Failure-path tests — COMPLETE (QA failure aborts before packaging; domain errors returned as values; unexpected errors propagate)
 - Live provider verification — arXiv ✅, Wikimedia ✅ (fixed 403), SearXNG requires self-hosting, Tavily pending API key
 - Derived relevance scoring for providers reporting no score — COMPLETE
 - Intent-conditioned ranking + audience fit — COMPLETE (see ADR-007)
