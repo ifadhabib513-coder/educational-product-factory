@@ -36,6 +36,7 @@ from lpf.errors import ValidationError
 from lpf.orchestration.context import RunContext
 from lpf.result import Result, is_ok
 from lpf.schemas.research import EvidenceMap
+from lpf.validators.factual import check_factual_consistency
 
 
 @dataclass(frozen=True)
@@ -245,6 +246,16 @@ def build_qa(
             suggested_fix="Every answer in the key must reference an existing question.",
         ),
         _evidence_gate(ctx, evidence_map),
+        _gate_from_result(
+            ctx,
+            name="factual_consistency",
+            result=check_factual_consistency(lessons, evidence_map),
+            location="lessons",
+            suggested_fix=(
+                "Ground every factual claim in supported evidence: drop "
+                "contradictory claims or raise their confidence with sources."
+            ),
+        ),
     ]
 
     if required_gates:

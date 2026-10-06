@@ -132,3 +132,22 @@ class TestDeterminism:
         assert claim_ids
         assert all(claim_id.startswith("scoped-claim-") for claim_id in claim_ids)
         assert len(claim_ids) == len(set(claim_ids))
+
+
+class TestMockResearchNoise:
+    """Canned mock snippets must not manufacture conflicts (TASK-002)."""
+
+    async def test_offline_run_reports_no_spurious_conflicts(self, tmp_path: Path) -> None:
+        result = await _run(tmp_path, run_id="noise")
+        assert result.succeeded
+        report = next(
+            artifact for artifact in result.artifacts if artifact.artifact_type == "research_report"
+        )
+        assert report.conflicts == []
+
+    async def test_mock_claims_record_no_contradictions(self, tmp_path: Path) -> None:
+        result = await _run(tmp_path, run_id="neutral")
+        evidence = next(
+            artifact for artifact in result.artifacts if artifact.artifact_type == "evidence_map"
+        )
+        assert evidence.conflicting_claims == 0

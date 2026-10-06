@@ -311,6 +311,29 @@ class TestIntentMatch:
             subtopic, query, QueryIntent.DEFINITIONAL
         )
 
+    def test_exact_title_weight_is_the_only_difference_when_text_is_identical(self) -> None:
+        """Isolates the TASK-001 signal by holding coverage and cue constant.
+
+        Both candidates carry the same snippet, so coverage, definition cue and
+        lexical relevance are identical; the score gap is exactly the exact-title
+        weight. Zeroing that weight must break this assertion.
+        """
+        query = "What is linear algebra?"
+        canonical = self._result("Linear algebra", DEFINITIONAL_TEXT)
+        subtopic = self._result("Basic Linear Algebra Subprograms", DEFINITIONAL_TEXT)
+
+        from lpf.research.relevance import lexical_relevance
+
+        assert lexical_relevance(query, canonical.title, canonical.snippet) == lexical_relevance(
+            query, subtopic.title, subtopic.snippet
+        )
+        gap = intent_match(canonical, query, QueryIntent.DEFINITIONAL) - intent_match(
+            subtopic, query, QueryIntent.DEFINITIONAL
+        )
+        # Expected value is asserted literally so that lowering the production
+        # weight to zero fails here instead of moving the expectation with it.
+        assert gap == pytest.approx(0.2)
+
 
 class TestExactTitleMatch:
     @pytest.mark.parametrize(
