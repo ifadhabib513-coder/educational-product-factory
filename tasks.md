@@ -15,7 +15,7 @@
     - Write unit tests in `tests/test_research_intent_scoring.py` verifying exact-title definitional queries rank encyclopedic articles higher than incidental mentions.
     - Full pytest suite (671+ tests) and ruff linters pass.
 
-- [ ] **TASK-002**: Eliminate Spurious False-Positive Conflicts in Research Mock Sentences
+- [x] **TASK-002**: Eliminate Spurious False-Positive Conflicts in Research Mock Sentences
   - **Objective**: As identified in v0.6.0 version history, mock canned sentences share bucket words causing the conflict detector to report 8 false-positive conflicts during offline pipeline runs.
   - **Acceptance Criteria**:
     - Inspect mock source texts and conflict detection keywords/buckets.
@@ -23,7 +23,7 @@
     - Ensure genuine conflict detection tests continue passing with zero regressions.
     - Full pytest suite and ruff linters pass.
 
-- [ ] **TASK-003**: Implement Factual Quality Gate Validator
+- [x] **TASK-003**: Implement Factual Quality Gate Validator
   - **Objective**: Implement the factual consistency hard gate in `src/lpf/validators/` or `src/lpf/qa/` verifying generated lesson/claim assertions align with direct research evidence records.
   - **Acceptance Criteria**:
     - Schema validation and verification logic ensuring factual claims cite valid evidence record IDs.
@@ -31,7 +31,7 @@
     - Unit tests covering passing grounded content and failing ungrounded/conflicting content.
     - Full pytest suite and ruff linters pass.
 
-- [ ] **TASK-004**: Implement Numerical and Symbolic Gate Validator
+- [x] **TASK-004**: Implement Numerical and Symbolic Gate Validator
   - **Objective**: Implement numerical/symbolic consistency validation for STEM/quantitative lessons and worked examples (e.g., matching calculation steps to final answers using deterministic Python/SymPy evaluation).
   - **Acceptance Criteria**:
     - Validator verifying mathematical consistency between worked example steps and answers.

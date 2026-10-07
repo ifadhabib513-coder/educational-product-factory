@@ -32,11 +32,13 @@ from lpf.domain.validation import (
     check_objective_references,
     check_question_references,
 )
+from lpf.domain.worked_example import WorkedExample
 from lpf.errors import ValidationError
 from lpf.orchestration.context import RunContext
 from lpf.result import Result, is_ok
 from lpf.schemas.research import EvidenceMap
 from lpf.validators.factual import check_factual_consistency
+from lpf.validators.numerics import check_worked_example_arithmetic
 
 
 @dataclass(frozen=True)
@@ -184,6 +186,7 @@ def build_qa(
     answer_key: AnswerKey,
     assessment: Assessment,
     evidence_map: EvidenceMap,
+    worked_examples: list[WorkedExample] | None = None,
     verified_source_ids: set[str] | None = None,
     required_gates: list[str] | None = None,
 ) -> QaBundle:
@@ -255,6 +258,16 @@ def build_qa(
             suggested_fix=(
                 "Cite only sources this run actually verified, and ground every "
                 "factual claim in evidence that is not purely contradictory."
+            ),
+        ),
+        _gate_from_result(
+            ctx,
+            name="numerical_consistency",
+            result=check_worked_example_arithmetic(list(worked_examples or [])),
+            location="worked_examples",
+            suggested_fix=(
+                "Recompute each worked example: every numeric step must be "
+                "arithmetically true and the final answer must agree with the steps."
             ),
         ),
     ]
