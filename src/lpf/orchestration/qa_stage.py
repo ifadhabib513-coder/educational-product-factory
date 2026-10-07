@@ -184,6 +184,7 @@ def build_qa(
     answer_key: AnswerKey,
     assessment: Assessment,
     evidence_map: EvidenceMap,
+    verified_source_ids: set[str] | None = None,
     required_gates: list[str] | None = None,
 ) -> QaBundle:
     """Run every validator and assemble a VerificationResult."""
@@ -249,11 +250,11 @@ def build_qa(
         _gate_from_result(
             ctx,
             name="factual_consistency",
-            result=check_factual_consistency(lessons, evidence_map),
-            location="lessons",
+            result=check_factual_consistency(lessons, evidence_map, verified_source_ids),
+            location="evidence_map",
             suggested_fix=(
-                "Ground every factual claim in supported evidence: drop "
-                "contradictory claims or raise their confidence with sources."
+                "Cite only sources this run actually verified, and ground every "
+                "factual claim in evidence that is not purely contradictory."
             ),
         ),
     ]

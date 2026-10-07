@@ -185,6 +185,9 @@ class FactoryPipeline:
                 answer_key=assessment.answer_key,
                 assessment=assessment.assessment,
                 evidence_map=research.evidence_map,
+                verified_source_ids={
+                    source.source_id for source in research.report.verified_sources
+                },
                 required_gates=required_gates,
             )
             verification = qa.verification

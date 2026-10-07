@@ -229,3 +229,67 @@ class TestQaGateWiring:
         names = [gate.gate_name for gate in result.verification.gates]  # type: ignore[union-attr]
         assert "factual_consistency" in names
         assert "required_gates_present" in names
+
+
+class TestEvidenceCatalogueIsLive:
+    """The citation half of the gate must run against real retrieved sources."""
+
+    async def test_pipeline_hands_the_gate_the_verified_source_catalogue(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import lpf.orchestration.qa_stage as qa_module
+
+        real = qa_module.check_factual_consistency
+        seen: list[set[str] | None] = []
+
+        def spy(
+            lessons: list[Lesson],
+            evidence_map: EvidenceMap,
+            evidence_record_ids: set[str] | None = None,
+        ):
+            seen.append(evidence_record_ids)
+            return real(lessons, evidence_map, evidence_record_ids)
+
+        monkeypatch.setattr(qa_module, "check_factual_consistency", spy)
+
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        result = await pipeline.run(_inputs(), run_id="cat", seed="s")
+        assert result.succeeded
+
+        report = next(
+            artifact for artifact in result.artifacts if artifact.artifact_type == "research_report"
+        )
+        expected = {source.source_id for source in report.verified_sources}
+        assert expected
+        assert seen == [expected]
+
+    async def test_claim_citing_a_source_that_never_verified_fails_the_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_build_research = pipeline_module.build_research
+
+        async def with_phantom_source(*args: object, **kwargs: object) -> ResearchBundle:
+            bundle = await original_build_research(*args, **kwargs)
+            em = bundle.evidence_map
+            phantom = _claim("c_phantom", source_ids=["src_never_verified"])
+            return replace(
+                bundle,
+                evidence_map=em.model_copy(update={"claims": [*em.claims, phantom]}),
+            )
+
+        monkeypatch.setattr(pipeline_module, "build_research", with_phantom_source)
+
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        result = await pipeline.run(_inputs(), run_id="phantom", seed="s")
+
+        assert not result.succeeded
+        assert result.state.stage is RunStage.FAILED
+        gate = next(
+            gate
+            for gate in result.verification.gates  # type: ignore[union-attr]
+            if gate.gate_name == "factual_consistency"
+        )
+        assert gate.status.value == "failed"
+        finding = gate.findings[0]
+        assert "invalid evidence record" in finding.problem
+        assert "src_never_verified" in finding.evidence
