@@ -13,7 +13,9 @@ from lpf.errors import WorkflowError
 from lpf.orchestration.context import RunContext
 from lpf.orchestration.state import (
     LEGAL_TRANSITIONS,
+    MAX_REVISIONS,
     PIPELINE_STAGES,
+    REVISION_TARGETS,
     RunStage,
     RunState,
 )
@@ -82,9 +84,33 @@ class TestRunState:
         assert state.is_terminal
         assert not state.can_advance(RunStage.SPECIFICATION)
 
-    def test_pipeline_stages_are_linear(self) -> None:
+    def test_pipeline_stages_are_linear_except_the_qa_revision_edges(self) -> None:
+        """Every stage has one successor, except QA which may also rewind."""
+        revision_edges: dict[RunStage, set[RunStage]] = {
+            RunStage.QA: {RunStage.CONTENT, RunStage.ASSESSMENT}
+        }
         for current, nxt in zip(PIPELINE_STAGES, PIPELINE_STAGES[1:], strict=False):
-            assert LEGAL_TRANSITIONS[current] == frozenset({nxt, RunStage.FAILED})
+            expected = {nxt, RunStage.FAILED} | revision_edges.get(current, set())
+            assert LEGAL_TRANSITIONS[current] == frozenset(expected)
         assert LEGAL_TRANSITIONS[PIPELINE_STAGES[-1]] == frozenset(
             {RunStage.COMPLETE, RunStage.FAILED}
         )
+
+    def test_revision_edges_are_only_opened_by_qa(self) -> None:
+        assert set(REVISION_TARGETS) == {RunStage.QA}
+        assert REVISION_TARGETS[RunStage.QA] == frozenset({RunStage.CONTENT, RunStage.ASSESSMENT})
+
+    def test_revision_edges_point_backwards(self) -> None:
+        for source, targets in REVISION_TARGETS.items():
+            for target in targets:
+                assert PIPELINE_STAGES.index(target) < PIPELINE_STAGES.index(source)
+
+    def test_revision_budget_is_bounded(self) -> None:
+        state = RunState(run_id="r")
+        for expected in range(1, MAX_REVISIONS + 1):
+            assert state.begin_revision() == expected
+        assert state.revisions_exhausted
+        with pytest.raises(WorkflowError) as raised:
+            state.begin_revision()
+        assert raised.value.code == "REVISION_BUDGET_EXHAUSTED"
+        assert state.revisions == MAX_REVISIONS

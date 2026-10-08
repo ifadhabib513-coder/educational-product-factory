@@ -46,10 +46,16 @@
     - Unit tests in `tests/test_packaging.py` or `tests/test_e2e_pipeline.py`.
     - Full pytest suite and ruff linters pass.
 
-- [ ] **TASK-006**: Support Cyclic Stage Machine Revision Loop
+- [x] **TASK-006**: Support Cyclic Stage Machine Revision Loop
   - **Objective**: Upgrade the stage machine from purely linear to allow cyclic transitions from `qa` failure back to `content` or `assessment` revision before retrying QA (up to a max revision count).
   - **Acceptance Criteria**:
     - Update state machine transition table to permit `qa -> content` on repairable QA findings.
     - Enforce bounded iteration count to prevent infinite revision loops.
     - Add tests verifying successful revision loop and eventual completion or abort.
     - Full pytest suite and ruff linters pass.
+
+---
+
+> **v0.7.0 milestone complete.** TASK-001 through TASK-006 are all checked. The
+> next iteration should start a new milestone section (v0.7.x / v0.8.0) rather
+> than hunting for an unfinished `[ ]` above.

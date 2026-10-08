@@ -35,6 +35,11 @@ impossible by construction — running a stage before its inputs exist, and
 silently skipping a stage. Branching, retry, and repair loops are out of scope
 for this version (the Revision crew will need them; see Known Limitations).
 
+> **Superseded in part by [ADR-010](010-bounded-qa-revision-loop.md).** QA now
+> holds two backward edges — `qa → content` and `qa → assessment` — declared in
+> `REVISION_TARGETS`. The forward-only property for every other stage, and both
+> impossibility arguments above, still hold.
+
 Illegal transitions raise `WorkflowError(code="ILLEGAL_TRANSITION")`. They are a
 programming error, not an input error, so they must surface loudly.
 
@@ -160,9 +165,10 @@ never be flattened into a "failed product".
 
 ## Known Limitations
 
-- **The machine is linear.** There is no retry and no repair loop. The Revision
+- **The machine was linear.** There is no retry and no repair loop. The Revision
   crew will require cycles; when it lands, the transition table grows edges and
-  this ADR is superseded for that part.
+  this ADR is superseded for that part. *Landed as [ADR-010](010-bounded-qa-revision-loop.md):
+  QA may now rewind to content or assessment, bounded by `MAX_REVISIONS`.*
 - **Mock content is canned.** Lesson prose is prompt-derived placeholder text.
   It proves the wiring, not the pedagogy.
 - **Mock conflicts are noise.** Eight spurious conflicts come from shared bucket

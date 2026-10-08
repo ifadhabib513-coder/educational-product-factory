@@ -35,6 +35,7 @@ from lpf.domain.validation import (
 from lpf.domain.worked_example import WorkedExample
 from lpf.errors import ValidationError
 from lpf.orchestration.context import RunContext
+from lpf.orchestration.state import MAX_REVISIONS
 from lpf.result import Result, is_ok
 from lpf.schemas.research import EvidenceMap
 from lpf.validators.factual import check_factual_consistency
@@ -189,8 +190,13 @@ def build_qa(
     worked_examples: list[WorkedExample] | None = None,
     verified_source_ids: set[str] | None = None,
     required_gates: list[str] | None = None,
+    iteration: int = 1,
 ) -> QaBundle:
-    """Run every validator and assemble a VerificationResult."""
+    """Run every validator and assemble a VerificationResult.
+
+    ``iteration`` records which attempt of the QA/revision cycle produced this
+    result: 1 for the first pass, 2 after the first revision, and so on.
+    """
     objective_ids = {objective.id for objective in objectives}
     lesson_ids = {lesson.id for lesson in lessons}
     question_ids = {question.id for question in questions}
@@ -309,8 +315,8 @@ def build_qa(
             gates=list(gates),
             overall_status=status,
             overall_score=passed / len(gates),
-            iteration=1,
-            max_iterations=3,
+            iteration=iteration,
+            max_iterations=MAX_REVISIONS + 1,
             source_refs=[blueprint.id, assessment.id, evidence_map.id],
         )
     )

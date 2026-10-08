@@ -1,9 +1,12 @@
 """Run state machine — the legal order of pipeline stages.
 
-Stages are strictly linear. A linear machine is enough for a deterministic
-mock pipeline, and it makes two bugs impossible by construction: running a stage
-before its inputs exist, and silently skipping a stage. Branching, retry, and
-repair loops are deliberately out of scope for this version; see ADR-008.
+The machine is linear from ``created`` to ``packaging``, which makes two bugs
+impossible by construction: running a stage before its inputs exist, and
+silently skipping a stage. The single departure from linearity is a *bounded*
+revision loop owned by QA: a failure whose fix lives in an earlier content or
+assessment stage may step back exactly that far, once per revision, until the
+budget in :data:`MAX_REVISIONS` runs out. See ADR-008 (linearity) and ADR-010
+(the revision loop).
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Final
 
 from lpf.errors import WorkflowError
 
@@ -48,15 +52,34 @@ _STAGE_ORDER: tuple[RunStage, ...] = (
 
 _TERMINAL: frozenset[RunStage] = frozenset({RunStage.COMPLETE, RunStage.FAILED})
 
+#: How many times a run may step back from QA to an earlier stage. Bounded so a
+#: deterministic failure can never spin: a run either converges within this many
+#: cycles or is reported as FAILED with the gates that never cleared.
+MAX_REVISIONS: Final = 3
+
+#: The only backward edges in the machine, keyed by the stage that opens them.
+#: QA is the sole revision source, and it may only rewind to the two stages that
+#: produce the artifacts its gates check. Anything further back (syllabus,
+#: research, specification) is out of scope for this version.
+REVISION_TARGETS: Final[dict[RunStage, frozenset[RunStage]]] = {
+    RunStage.QA: frozenset({RunStage.CONTENT, RunStage.ASSESSMENT})
+}
+
 
 def _build_transitions() -> dict[RunStage, frozenset[RunStage]]:
-    """Forward edge to the successor, plus ``failed`` from every non-terminal stage."""
+    """Forward edge to the successor, plus ``failed`` from every non-terminal stage.
+
+    Revision edges from :data:`REVISION_TARGETS` are added last so a reader can
+    see the whole backward surface of the machine in one place.
+    """
     transitions: dict[RunStage, set[RunStage]] = {stage: set() for stage in RunStage}
     for current, nxt in zip(_STAGE_ORDER, _STAGE_ORDER[1:], strict=False):
         transitions[current].add(nxt)
     for stage in _STAGE_ORDER:
         if stage not in _TERMINAL:
             transitions[stage].add(RunStage.FAILED)
+    for source, targets in REVISION_TARGETS.items():
+        transitions[source] |= set(targets)
     return {stage: frozenset(targets) for stage, targets in transitions.items()}
 
 
@@ -85,11 +108,43 @@ class RunState:
     stage: RunStage = RunStage.CREATED
     history: list[StageTransition] = field(default_factory=list)
     failure_reason: str | None = None
+    #: Number of QA-initiated step-backs this run has taken so far.
+    revisions: int = 0
 
     @property
     def is_terminal(self) -> bool:
         """True once the run has completed or failed."""
         return self.stage in _TERMINAL
+
+    @property
+    def revisions_exhausted(self) -> bool:
+        """True once no further revision cycle may be started."""
+        return self.revisions >= MAX_REVISIONS
+
+    def begin_revision(self) -> int:
+        """Claim one revision from the budget, returning the new revision number.
+
+        The stage transition itself is left to the caller's normal ``advance``,
+        so an illegal target is still reported as ``ILLEGAL_TRANSITION``. What
+        this method guards is the budget: it raises ``WorkflowError`` rather
+        than let a run revise forever.
+        """
+        if self.revisions_exhausted:
+            raise WorkflowError(
+                code="REVISION_BUDGET_EXHAUSTED",
+                message=(
+                    f"Run {self.run_id!r} already used all {MAX_REVISIONS} "
+                    f"revision(s) and may not revise again."
+                ),
+                details={
+                    "run_id": self.run_id,
+                    "revisions": self.revisions,
+                    "max_revisions": MAX_REVISIONS,
+                    "stage": self.stage.value,
+                },
+            )
+        self.revisions += 1
+        return self.revisions
 
     def can_advance(self, to_stage: RunStage) -> bool:
         """Whether a transition from the current stage would be legal."""

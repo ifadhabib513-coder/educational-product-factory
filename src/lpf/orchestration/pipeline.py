@@ -1,12 +1,17 @@
 """Factory pipeline — composes the stages into one deterministic run.
 
-The pipeline owns the state machine and the event log. Each stage advances the run
-exactly once and announces itself on the log, so a completed manifest can be
-replayed: the stage history and the artifacts always agree.
+The pipeline owns the state machine and the event log. Each stage visit advances
+the run exactly once and announces itself on the log, so a completed manifest can
+be replayed: the stage history and the artifacts always agree.
 
-Failure policy: expected domain failures (``LpfError``) mark the run ``FAILED`` and
-are returned as a value. Unexpected exceptions are programmer errors and propagate.
-Neither is swallowed.
+The only loop is the QA revision cycle. QA may rewind to content or assessment
+for a failure it can attribute to those stages, bounded by ``MAX_REVISIONS``; a
+failure it cannot attribute, or a budget that has run out, ends the run instead
+of repeating work that would fail the same way.
+
+Failure policy: expected domain failures (``LpfError``) mark the run ``FAILED``
+and are returned as a value. Unexpected exceptions are programmer errors and
+propagate. Neither is swallowed.
 """
 
 from __future__ import annotations
@@ -33,7 +38,8 @@ from lpf.orchestration.model import DeterministicMockModel
 from lpf.orchestration.packaging_stage import PackageResult, package_run
 from lpf.orchestration.qa_stage import QaBundle, build_qa
 from lpf.orchestration.research_stage import ResearchBundle, build_research
-from lpf.orchestration.state import RunStage, RunState
+from lpf.orchestration.revision import route_failed_gates
+from lpf.orchestration.state import MAX_REVISIONS, RunStage, RunState
 from lpf.orchestration.syllabus_stage import SyllabusBundle, build_syllabus
 from lpf.research.audience import AudienceLevel, classify_audience
 from lpf.research.providers.base import SearchProviderProto
@@ -139,73 +145,121 @@ class FactoryPipeline:
             artifacts.append(syllabus.blueprint)
             self._complete(ctx, state, events, RunStage.SYLLABUS, [syllabus.blueprint])
 
-            # --- Content ---------------------------------------------------
-            self._begin(ctx, state, events, RunStage.CONTENT)
-            content: ContentBundle = await build_content(
-                ctx,
-                blueprint=syllabus.blueprint,
-                objectives_by_id={obj.id: obj for obj in discovery.outcomes.outcomes},
-                level=level,
-                model=self._model,
-            )
-            content_artifacts = [
-                *content.lessons,
-                *content.worked_examples,
-                *content.misconceptions,
-            ]
-            artifacts += content_artifacts
-            self._complete(ctx, state, events, RunStage.CONTENT, content_artifacts)
+            # --- Content, Assessment, QA: the one cycle in the machine ----
+            # QA does not have to be the end of the line. When a gate fails on
+            # an artifact that an earlier stage produced, the run rewinds to
+            # that stage and rebuilds forward, at most MAX_REVISIONS times.
+            # Superseded artifacts are dropped from the run as the cycle goes
+            # around, so the shipped product never contains a lesson that was
+            # thrown away on a later pass.
+            rebuild_content = True
+            content: ContentBundle | None = None
+            assessment: AssessmentBundle | None = None
+            content_artifacts: list[BaseModel] = []
+            assessment_artifacts: list[BaseModel] = []
+            verification_artifacts: list[BaseModel] = []
 
-            # --- Assessment ------------------------------------------------
-            self._begin(ctx, state, events, RunStage.ASSESSMENT)
-            assessment: AssessmentBundle = build_assessment(
-                ctx,
-                lessons=list(content.lessons),
-                title=f"Check your understanding: {discovery.problem.subject}",
-            )
-            assessment_artifacts = [
-                *assessment.questions,
-                *assessment.answers,
-                assessment.answer_key,
-                assessment.assessment,
-            ]
-            artifacts += assessment_artifacts
-            self._complete(ctx, state, events, RunStage.ASSESSMENT, assessment_artifacts)
+            while True:
+                if rebuild_content:
+                    _discard(artifacts, content_artifacts)
+                    self._begin(ctx, state, events, RunStage.CONTENT)
+                    content = await build_content(
+                        ctx,
+                        blueprint=syllabus.blueprint,
+                        objectives_by_id={obj.id: obj for obj in discovery.outcomes.outcomes},
+                        level=level,
+                        model=self._model,
+                    )
+                    content_artifacts = [
+                        *content.lessons,
+                        *content.worked_examples,
+                        *content.misconceptions,
+                    ]
+                    artifacts += content_artifacts
+                    self._complete(ctx, state, events, RunStage.CONTENT, content_artifacts)
+                # content is built on the first pass and retained thereafter.
+                assert content is not None
 
-            # --- QA --------------------------------------------------------
-            self._begin(ctx, state, events, RunStage.QA)
-            qa: QaBundle = build_qa(
-                ctx,
-                blueprint=syllabus.blueprint,
-                objectives=list(discovery.outcomes.outcomes),
-                lessons=list(content.lessons),
-                misconceptions=list(content.misconceptions),
-                questions=list(assessment.questions),
-                answers=list(assessment.answers),
-                answer_key=assessment.answer_key,
-                assessment=assessment.assessment,
-                evidence_map=research.evidence_map,
-                worked_examples=list(content.worked_examples),
-                verified_source_ids={
-                    source.source_id for source in research.report.verified_sources
-                },
-                required_gates=required_gates,
-            )
-            verification = qa.verification
-            artifacts.append(verification)
-            self._complete(ctx, state, events, RunStage.QA, [verification])
+                # --- Assessment ----------------------------------------
+                _discard(artifacts, assessment_artifacts)
+                self._begin(ctx, state, events, RunStage.ASSESSMENT)
+                assessment = build_assessment(
+                    ctx,
+                    lessons=list(content.lessons),
+                    title=f"Check your understanding: {discovery.problem.subject}",
+                )
+                assessment_artifacts = [
+                    *assessment.questions,
+                    *assessment.answers,
+                    assessment.answer_key,
+                    assessment.assessment,
+                ]
+                artifacts += assessment_artifacts
+                self._complete(ctx, state, events, RunStage.ASSESSMENT, assessment_artifacts)
 
-            if verification.overall_status is GateStatus.FAILED:
+                # --- QA ------------------------------------------------
+                _discard(artifacts, verification_artifacts)
+                self._begin(ctx, state, events, RunStage.QA)
+                qa: QaBundle = build_qa(
+                    ctx,
+                    blueprint=syllabus.blueprint,
+                    objectives=list(discovery.outcomes.outcomes),
+                    lessons=list(content.lessons),
+                    misconceptions=list(content.misconceptions),
+                    questions=list(assessment.questions),
+                    answers=list(assessment.answers),
+                    answer_key=assessment.answer_key,
+                    assessment=assessment.assessment,
+                    evidence_map=research.evidence_map,
+                    worked_examples=list(content.worked_examples),
+                    verified_source_ids={
+                        source.source_id for source in research.report.verified_sources
+                    },
+                    required_gates=required_gates,
+                    iteration=state.revisions + 1,
+                )
+                verification = qa.verification
+                verification_artifacts = [verification]
+                artifacts.append(verification)
+                self._complete(ctx, state, events, RunStage.QA, [verification])
+
+                if verification.overall_status is not GateStatus.FAILED:
+                    break
+
                 failed_gates = [
                     gate.gate_name
                     for gate in verification.gates
                     if gate.status is GateStatus.FAILED
                 ]
-                state.fail(f"QA gates failed: {failed_gates}", at=ctx.now())
+                target = route_failed_gates(failed_gates)
+
+                if target is None:
+                    reason = f"QA gates failed and are not repairable: {failed_gates}"
+                elif state.revisions_exhausted:
+                    reason = (
+                        f"QA revision budget of {MAX_REVISIONS} exhausted; "
+                        f"gates still failing: {failed_gates}"
+                    )
+                else:
+                    state.begin_revision()
+                    rebuild_content = target is RunStage.CONTENT
+                    events.emit(
+                        EventType.REVISION_STARTED,
+                        stage=RunStage.QA,
+                        message=(
+                            f"QA failed on {failed_gates}; "
+                            f"revision {state.revisions} rewinds to "
+                            f"'{target.value}'."
+                        ),
+                        timestamp=ctx.now(),
+                    )
+                    continue
+
+                state.fail(reason, at=ctx.now())
                 events.emit(
                     EventType.RUN_FAILED,
                     stage=RunStage.QA,
-                    message=f"QA failed on gates: {failed_gates}",
+                    message=reason,
                     timestamp=ctx.now(),
                 )
                 return FactoryRunResult(
@@ -302,3 +356,17 @@ def _bundle_artifacts(bundle: DiscoveryBundle) -> list[BaseModel]:
         bundle.market,
         bundle.brief,
     ]
+
+
+def _discard(artifacts: list[BaseModel], superseded: list[BaseModel]) -> None:
+    """Drop ``superseded`` from the run's live artifact list, in place.
+
+    Called before a stage re-runs. Objects are matched by identity, not by
+    value, because the point is "the objects from the pass we just threw
+    away", and because content hashes make two distinct passes look similar
+    enough that value equality would be a trap.
+    """
+    if not superseded:
+        return
+    stale = {id(artifact) for artifact in superseded}
+    artifacts[:] = [artifact for artifact in artifacts if id(artifact) not in stale]

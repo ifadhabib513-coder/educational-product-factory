@@ -104,12 +104,12 @@
 
 **Status: PARTIAL** (see ADR-008)
 
-- Workflow state machine — COMPLETE (`orchestration/state.py`, linear stage machine)
+- Workflow state machine — COMPLETE (`orchestration/state.py`, forward-linear machine with two bounded QA revision edges; see ADR-010)
 - Legal transitions — COMPLETE (`ILLEGAL_TRANSITION` on illegal advance)
-- Events — COMPLETE (`orchestration/events.py`, `run_log.json`)
+- Events — COMPLETE (`orchestration/events.py`, `run_log.json`, `revision_started`)
 - Failure handling — COMPLETE (`LpfError` → failed run value; unexpected errors propagate)
 - Persistence abstraction — PENDING (filesystem only; no DB/memory store yet)
-- Retry and repair — PENDING (no revision loop; the machine is linear by design)
+- Retry and repair — COMPLETE (QA rewinds to content or assessment for repairable gates, bounded by `MAX_REVISIONS = 3`)
 
 ## Stage 4 — Mock End-to-End Pipeline
 
