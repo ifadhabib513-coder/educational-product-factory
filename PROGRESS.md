@@ -10,6 +10,10 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 3 | 2026-10-05 | TASK-003 | Factual Quality Gate Validator | Completed | `f82be33`, `cf27812`, `0f65e47` |
 | 4 | 2026-10-07 | TASK-004 | Numerical Consistency Gate for Worked Examples | Completed | `be905b3` |
 | 5 | 2026-10-08 | TASK-005 | Multi-Format Packaging (HTML and ZIP Bundle) | Completed | `2b7a061` |
+| 6 | 2026-10-08 | TASK-006 | Bounded Cyclic Stage Machine Revision Loop | Completed | `b116f0c` |
+
+> **v0.7.0 milestone complete** — TASK-001 through TASK-006 are all done. The
+> next iteration needs a new milestone section in `tasks.md`.
 
 ---
 ## Detailed Iteration Logs
@@ -83,3 +87,22 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 150 files already formatted.
   - Mutation-tested (6/6 caught): escaping removed, pipe tables disabled, member sorting dropped, non-epoch timestamp, `product.html` dropped from the bundle, HTML rendered from an empty document.
   - Commit `2b7a061`.
+
+### Iteration 6 — 2026-10-08: TASK-006
+- **Task**: Cyclic stage machine revision loop — QA may rewind to `content` or `assessment`, bounded.
+- **Changes**:
+  - `src/lpf/orchestration/state.py`:
+    - `REVISION_TARGETS` declares the machine's only backward edges: `qa → content` and `qa → assessment`. Every other stage still has one successor plus `failed`.
+    - `MAX_REVISIONS = 3` and `RunState.revisions`; `begin_revision()` claims from the budget and raises `WorkflowError(code="REVISION_BUDGET_EXHAUSTED")` when it is spent, while `revisions_exhausted` lets the pipeline fail with a message naming the gates that never cleared.
+  - New `src/lpf/orchestration/revision.py`: `route_failed_gates` maps failed gates to a stage through an explicit ownership table (`OWNED_GATES`). Ownership is partial — `research_evidence`, `curriculum_coverage`, `objective_references`, `schema_validity`, `required_gates_present` and any unclaimed gate name are unowned, so one of them in the failure set ends the run instead of burning budget on a rebuild that cannot help. A mixed content + assessment failure revisits content, because content rebuilds forward into assessment anyway.
+  - `src/lpf/orchestration/pipeline.py`: content → assessment → QA is now a `while True` loop with the routing decision at the bottom. `_discard(artifacts, <last pass's artifacts>)` runs before each rebuild and matches by object identity, so a revised product ships one live set of lessons rather than the rejected pass alongside its replacement.
+  - `build_qa(..., iteration=...)` now records which pass of the cycle produced the result; `max_iterations` is derived from `MAX_REVISIONS + 1` so both fields describe the same cycle.
+  - New `EventType.REVISION_STARTED` records why a stage is running twice; clean runs never emit it, so their event log is unchanged.
+  - Tests: `tests/test_revision_loop.py` (17 tests — repair converges, superseded artifacts dropped, assessment-only routing, budget exhaustion, unowned-gate abort, routing table, byte-identical repetition of both a repaired and an exhausted run) plus `TestRunState.test_revision_budget_is_bounded` and two rewritten transition-table tests in `tests/test_orchestration_context.py`.
+- **Verification**:
+  - `python -m pytest tests/`: 801 passed (20 new, 0 regressions) — including the existing whole-tree byte-identical determinism test. Baseline at `392b8bb` re-measured in a clean worktree: 781 passed.
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 153 files already formatted.
+  - Mutation-tested (14/14 caught): both revision edges removed, unowned gates no longer aborting, unknown gate falling back to content, content/assessment routing swapped, each of the three `_discard` calls neutralised, budget exhausted from the first failure, revision counter not incrementing, iteration pinned to 1, and content not rebuilt on a content failure.
+  - One mutation survived the first pass — removing the `NON_REPAIRABLE_GATES` early exit changed no behaviour, because the unknown-gate rule already covered it. The redundant branch was deleted in favour of a single ownership rule rather than written around with a test.
+  - Docs: `docs/adr/010-bounded-qa-revision-loop.md` added; ADR-008 marked superseded in part; ROADMAP Stage 3 "Retry and repair" moved from PENDING to COMPLETE; `tasks.md` TASK-006 checked and the v0.7.0 milestone marked complete.
+  - Commit `b116f0c`.
