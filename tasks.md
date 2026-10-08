@@ -38,7 +38,7 @@
     - Unit tests with both correct equations/calculations and flawed examples caught by the gate.
     - Full pytest suite and ruff linters pass.
 
-- [ ] **TASK-005**: Add Multi-Format Packaging (HTML and ZIP Bundle)
+- [x] **TASK-005**: Add Multi-Format Packaging (HTML and ZIP Bundle)
   - **Objective**: Extend `lpf.packaging` so `lpf generate` / packaging stage outputs clean standalone HTML and an archival ZIP bundle in addition to Markdown and JSON manifests.
   - **Acceptance Criteria**:
     - HTML generator template or converter for `product.md`.

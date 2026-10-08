@@ -108,7 +108,16 @@ def generate(
         )
     if result.package is not None:
         click.echo(f"Written to: {result.package.root}")
-        click.echo(json.dumps({"product": str(result.package.product_path)}, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "product": str(result.package.product_path),
+                    "html": str(result.package.product_html_path),
+                    "bundle": str(result.package.bundle_path),
+                },
+                indent=2,
+            )
+        )
 
 
 if __name__ == "__main__":

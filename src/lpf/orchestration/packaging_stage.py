@@ -5,10 +5,13 @@ Output layout under ``<output_dir>/<run_id>/``::
     manifest.json        run metadata: stages, counts, artifact ids and hashes
     run_log.json         the ordered event log
     product.md           human-readable product document
+    product.html         the same document as standalone HTML
+    <run_id>.zip         archival bundle: manifest, markdown, html, artifacts
     artifacts/           one JSON file per root artifact
 
 JSON is written with sorted keys and a fixed indent so two runs with the same
-inputs produce identical bytes.
+inputs produce identical bytes. The HTML document and the ZIP bundle follow
+the same rule: no wall clock, no host-specific metadata.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from lpf.domain.quality import GateStatus, VerificationResult
 from lpf.orchestration.context import RunContext
 from lpf.orchestration.events import EventLog
 from lpf.orchestration.state import RunState
+from lpf.packaging import build_run_bundle, render_html_document
 
 
 @dataclass(frozen=True)
@@ -32,7 +36,9 @@ class PackageResult:
     root: Path
     manifest_path: Path
     product_path: Path
+    product_html_path: Path
     run_log_path: Path
+    bundle_path: Path
     artifact_paths: tuple[Path, ...]
 
 
@@ -150,29 +156,46 @@ def package_run(
     manifest_path = root / "manifest.json"
     run_log_path = root / "run_log.json"
     product_path = root / "product.md"
+    product_html_path = root / "product.html"
 
     _write_json(manifest_path, manifest)
     _write_json(run_log_path, {"run_id": ctx.run_id, "events": events.to_dicts()})
-    product_path.write_text(
-        render_product_markdown(
-            title=_product_title(artifacts),
-            level=_learner_level(artifacts),
-            problem_statement=_problem_statement(artifacts),
-            objectives=_objectives(artifacts),
-            lessons=[a for a in artifacts if getattr(a, "artifact_type", "") == "lesson"],
-            questions=[
-                a for a in artifacts if getattr(a, "artifact_type", "") == "practice_question"
-            ],
-            verification=verification,
-        ),
+
+    title = _product_title(artifacts)
+    product_markdown = render_product_markdown(
+        title=title,
+        level=_learner_level(artifacts),
+        problem_statement=_problem_statement(artifacts),
+        objectives=_objectives(artifacts),
+        lessons=[a for a in artifacts if getattr(a, "artifact_type", "") == "lesson"],
+        questions=[a for a in artifacts if getattr(a, "artifact_type", "") == "practice_question"],
+        verification=verification,
+    )
+    product_path.write_text(product_markdown, encoding="utf-8")
+    product_html_path.write_text(
+        render_html_document(product_markdown, title=title),
         encoding="utf-8",
+    )
+
+    bundle_path = build_run_bundle(
+        root=root,
+        run_id=ctx.run_id,
+        members=[
+            ("manifest.json", manifest_path),
+            ("product.html", product_html_path),
+            ("product.md", product_path),
+            ("run_log.json", run_log_path),
+            *((f"artifacts/{path.name}", path) for path in artifact_paths),
+        ],
     )
 
     return PackageResult(
         root=root,
         manifest_path=manifest_path,
         product_path=product_path,
+        product_html_path=product_html_path,
         run_log_path=run_log_path,
+        bundle_path=bundle_path,
         artifact_paths=tuple(artifact_paths),
     )
 
