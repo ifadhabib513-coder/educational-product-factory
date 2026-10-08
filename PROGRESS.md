@@ -9,6 +9,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 2 | 2026-10-04 | TASK-002 | Eliminate Spurious False-Positive Conflicts in Mock Sentences | Completed | `ceca889` |
 | 3 | 2026-10-05 | TASK-003 | Factual Quality Gate Validator | Completed | `f82be33`, `cf27812`, `0f65e47` |
 | 4 | 2026-10-07 | TASK-004 | Numerical Consistency Gate for Worked Examples | Completed | `be905b3` |
+| 5 | 2026-10-08 | TASK-005 | Multi-Format Packaging (HTML and ZIP Bundle) | Completed | `2b7a061` |
 
 ---
 ## Detailed Iteration Logs
@@ -67,3 +68,18 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 146 files already formatted.
   - Mutation-tested (5/5 caught): gate short-circuited, step comparison flipped, final-answer check dropped, pipeline stops passing examples, binary floats replace exact decimals.
   - Commit `be905b3`.
+
+### Iteration 5 — 2026-10-08: TASK-005
+- **Task**: Multi-format packaging — standalone HTML and an archival ZIP bundle alongside `product.md`.
+- **Changes**:
+  - Created the `lpf.packaging` package the backlog names:
+    - `lpf/packaging/html.py` — `markdown_to_html` / `render_html_document`. Covers exactly the Markdown the factory emits (headings, paragraphs, bullet/ordered lists, pipe tables, `**bold**`, `*italic*`, `` `code` ``). Text is HTML-escaped *before* emphasis is applied and code spans are parked in placeholders, so `<script>` in a lesson ships as visible text and `a ** b` inside backticks is never reinterpreted. Output is a self-contained document with embedded CSS and no external assets.
+    - `lpf/packaging/bundle.py` — `build_run_bundle` writes `<run_id>.zip` with sorted members, a fixed DOS epoch timestamp (1980-01-01), pinned `create_system` and fixed Unix mode, so the archive is byte-identical across runs *and* platforms.
+  - `packaging_stage.package_run` now also writes `product.html` and `<run_id>.zip` (containing `manifest.json`, `product.md`, `product.html`, `run_log.json` and every `artifacts/*.json`); `PackageResult` gained `product_html_path` and `bundle_path`.
+  - The bundle is built from an explicit member list, so it never packages itself even though it lives inside the run directory.
+  - CLI reports `html` and `bundle` alongside `product` in its JSON summary.
+- **Verification**:
+  - `python -m pytest tests/`: 781 passed (33 new, 0 regressions) — including the existing whole-tree byte-identical determinism test, which now covers the HTML file and the ZIP.
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 150 files already formatted.
+  - Mutation-tested (6/6 caught): escaping removed, pipe tables disabled, member sorting dropped, non-epoch timestamp, `product.html` dropped from the bundle, HTML rendered from an empty document.
+  - Commit `2b7a061`.
