@@ -245,3 +245,18 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 164 files formatted.
   - Mutation-tested (8/8 killed, `%TEMP%\opencode\mutate_phase_d.py`): pipeline stops enforcing minimum_score, stops threading evidence_required, ignores spec required_gates, inverts the minimum_score comparison, evidence gate ignores evidence_required, evidence gate never notices zero support, MINIMUM_SCORE dropped from the catalog, MINIMUM_SCORE left out of the ownership sets.
   - Docs: audit Phase D marked DONE; `tasks.md` TASK-015 checked (Phase D section); `version_history.md` Current Status updated.
+
+### Iteration 16 — 2026-10-11: TASK-016
+- **Task**: Phase E of the audit plan — dead-code removal (audit item 5.*): trim `research/service.py` to the pipeline-reachable surface, delete the unwired `discovery/validation.py`, delete the scaffolding packages and crew contracts, prune exports with no reachable consumer, then re-measure coverage and add an enforced floor.
+- **Changes**:
+  - **E1 research/service.py**: removed the 7 unused public methods (`search_web`/`search_academic`/`search_wiki`/`extract_url`/`execute_plan`/`rank_sources`/`verify_source`) and dead `_deduplicate`, keeping only `execute_plan_questions`; `authority.py`/`tavily.py` docstrings de-referenced.
+  - **E2 discovery/validation.py**: deleted the package with its exports and `tests/test_discovery_validation.py`.
+  - **E3 scaffolding packages**: deleted `src/lpf/{agents,crews,api,content,exercises,learning,memory,qa,rendering,review,revision,tools,verification,prompts}/`, `schemas/contract.py`, `models/registry.py` (dead prompt machinery), and `domain/evidence.py`; removed the `crew`/`render`/`api`/`all` extras from `pyproject.toml`; `discovery_stage.py` docstring no longer points at `lpf.crews.discovery`.
+  - **E4 event/export pruning**: dropped the never-emitted `EventType.STAGE_FAILED` and `VALIDATION_WARNING`; trimmed `domain`/`models` `__all__` entries with no reachable consumer.
+  - **E5 coverage gate**: added `--cov=lpf --cov-report=term-missing --cov-fail-under=97` to `[tool.pytest.ini_options]` and a `[tool.coverage.report]` `__main__`-guard exclusion.
+  - Tests: removed/adjusted `test_research.py`, `test_models.py`, `test_domain_content.py`, and the three deleted test modules; added `tests/test_cli.py::TestCliReporting` (failed-run report + live-research provider wiring).
+- **Verification**:
+  - `python -m pytest`: 881 passed; gate reports `Required test coverage of 97% reached. Total coverage: 97.81%`.
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 127 files formatted.
+  - Mutation-tested (4/4 killed, `%TEMP%\opencode\mutate_phase_e.py`): failed run exits zero, failed-run message drops the stage, live-research wires arXiv twice, a deleted module (`domain.evidence`) is re-imported.
+  - Docs: audit Phase E marked DONE and coverage table updated; `tasks.md` TASK-016 checked (Phase E section); `version_history.md` Current Status updated.

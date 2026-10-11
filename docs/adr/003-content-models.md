@@ -43,3 +43,12 @@ These are the first line of defense. Validation functions provide the second lin
 - Fabricated citations are caught at construction, not release
 - Cross-artifact validation uses `Result` types for explicit error handling
 - Naming is unambiguous: `source_refs` = artifact IDs, `source` = external reference
+
+## Amendment — 2026-10-11 (TASK-016)
+
+`EvidenceRecord`/`EvidenceKind`/`VerificationStatus` (`src/lpf/domain/evidence.py`) had no
+reachable consumer — no stage or shipped path constructed or read one — so the module was
+removed. The provenance-honesty principle above is unchanged: it now lives in the research
+`EvidenceClaim`/`EvidenceMap` schemas (ADR-006) and the `factual_consistency` gate, which
+is what the pipeline actually enforces. See the whole-codebase audit
+(`docs/audits/codebase-gaps-and-bugs.md`, §5).

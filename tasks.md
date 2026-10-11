@@ -198,3 +198,20 @@
     - Full pytest suite and ruff linters pass; 8-point mutation harness killed 8/8.
   - **Implementation notes**: new `MINIMUM_SCORE` gate name in `orchestration.gates`, added to `ALL_GATES` and to `NON_REPAIRABLE_GATES` in `revision.py` (routed nowhere, so a sub-floor run fails immediately). `qa_stage._evidence_gate` takes `required`; `qa_stage._minimum_score_gate` computes passed/total over the gates built so far; `build_qa` takes `minimum_score`/`evidence_required` and dedupes/sorts `required_gates`. `pipeline.run` merges the run argument with `spec.spec.quality.required_gates` and passes `spec.spec.quality.minimum_score` + `spec.spec.constraints.evidence_required`. `discovery_stage` drops the phantom `required_gates=["schema_validity"]`. `seed` removed from `context.RunContext`, `packaging_stage` manifest, `cli.py`, and all call sites; `scoring.date_span`/`freshness` use `.timestamp()`. Tests: `tests/test_quality_contract.py` (`TestMinimumScore`, `TestSpecRequiredGates`, `TestEvidenceRequired`), `TestCliInputHygiene::test_no_seed_option_is_advertised`, `TestRunContext::test_the_dead_seed_field_is_gone`, and the updated `TestFreshness`. Suite: 965 passed, ruff clean, format 164 files. Mutation harness `%TEMP%\opencode\mutate_phase_d.py`, 8/8 killed.
 
+## v0.8.1 Milestone Tasks — Whole-Codebase Audit Fixes (Phase E: dead-code removal + coverage gate)
+
+> Phase E removes the scaffolding and dead exports the audit found (audit §5), leaving
+> only code with a reachable consumer, then turns the resulting coverage into an enforced
+> floor so the churn cannot come back.
+
+- [x] **TASK-016**: Dead-Code Removal + Coverage Gate (trim `research/service.py`, delete `discovery/validation.py` + scaffolding packages, prune dead exports, add `--cov-fail-under`)
+  - **Objective**: (1) keep only the pipeline-reachable surface in `research/service.py`; (2) delete the unwired `discovery/validation.py`; (3) delete every single-line scaffolding package and the crew contracts; (4) remove exports with no reachable consumer (`domain/evidence.py`, `models/registry.py`, the unreachable `EventType` members, the empty `prompts/`); (5) re-measure coverage and add an enforced `--cov-fail-under` gate.
+  - **Acceptance Criteria**:
+    - `ResearchService` exposes only `execute_plan_questions`; the unused public methods and their tests are gone.
+    - `lpf/discovery/` no longer exists; `lpf.crews.discovery` is no longer referenced anywhere.
+    - `src/lpf/{agents,crews,api,content,exercises,learning,memory,qa,rendering,review,revision,tools,verification,prompts}/`, `schemas/contract.py`, `models/registry.py`, and `domain/evidence.py` are deleted; the `crew`/`render`/`api`/`all` extras leave `pyproject.toml`.
+    - `EventType` contains only members the run loop emits; no `__all__` lists a name with no reachable consumer.
+    - `pytest` fails if total coverage drops below 97% (`--cov-fail-under=97`).
+    - Full pytest suite (881 passed) and ruff linters pass; mutation harness killed 4/4.
+  - **Implementation notes**: `research/service.py` reduced to the async `execute_plan_questions` entry point (dead `_deduplicate` and 7 public methods removed); `authority.py`/`tavily.py` docstrings de-reference the removed methods. Deleted packages/modules as above plus `tests/test_crew_discovery.py`, `tests/test_discovery_validation.py`, `tests/test_schemas_contract.py`; `tests/test_research.py`, `tests/test_models.py`, `tests/test_domain_content.py` trimmed to match. `discovery_stage.py` docstring no longer points at `lpf.crews.discovery`. `pyproject.toml` gains `--cov=lpf --cov-report=term-missing --cov-fail-under=97` in `addopts` and a `[tool.coverage.report]` exclusion for the `__main__` guard. New `tests/test_cli.py::TestCliReporting` covers the failed-run report and the live-research provider wiring (raises `cli.py` to 99%). Suite: 881 passed, total coverage 97.81%, ruff clean, format 127 files. Mutation harness `%TEMP%\opencode\mutate_phase_e.py`, 4/4 killed.
+

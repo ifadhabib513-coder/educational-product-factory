@@ -58,7 +58,7 @@
 - Lesson (artifact_type="lesson") with objective_ids min_length=1
 - WorkedExample (artifact_type="worked_example") with solution_steps min_length=1
 - Misconception (artifact_type="misconception") with MisconceptionSeverity StrEnum
-- EvidenceRecord (artifact_type="evidence_record") with EvidenceKind StrEnum
+- EvidenceRecord (artifact_type="evidence_record") with EvidenceKind StrEnum — REMOVED (TASK-016: no reachable consumer; ADR-003 evidence taxonomy lives on in the research `EvidenceClaim`/`EvidenceMap` schemas)
   - model_validator: direct_source requires source (no fabricated citations)
   - model_generated is a first-class kind (honesty, not prohibition)
 - check_misconception_objective_refs() validation function
@@ -274,9 +274,9 @@ Define the Product Contract. Create ProductSpec as the source of truth.
 - Problem analysis pipeline
 - MarketAnalysis, DiscoveryBrief, DiscoveryInputs — COMPLETE
 - 5 enums: ProblemUrgency, ProblemScope, PainPointCategory, MarketSegment, FeasibilityLevel — COMPLETE
-- 4 validation functions: check_discovery_chain, check_outcome_references, check_discovery_brief, check_feasibility — COMPLETE
-- Discovery crew contracts for agents 01, 02, 03 — COMPLETE
-- Discovery prompt templates (versioned) — COMPLETE
+- 4 validation functions: check_discovery_chain, check_outcome_references, check_discovery_brief, check_feasibility — REMOVED (TASK-016: never wired; `discovery_stage` is the deterministic implementation, pydantic enforces shapes)
+- Discovery crew contracts for agents 01, 02, 03 — REMOVED (TASK-016: scaffolding)
+- Discovery prompt templates (versioned) — REMOVED (TASK-016: stages inline their prompts)
 - See ADR-005
 
 ## Phase 4 — Research Engine
@@ -288,7 +288,7 @@ Define the Product Contract. Create ProductSpec as the source of truth.
 - Source hierarchy (primary → university → academic → educational → textbook → secondary → general) — COMPLETE (SourceAuthority, 8 values)
 - Web search integration — COMPLETE: SearXNG, Tavily, arXiv, Wikimedia, Mock
 - ResearchRouter (question → SearchStrategy → provider execution) — COMPLETE
-- ResearchService (search_web, search_academic, search_wiki, extract_url) — COMPLETE
+- ResearchService — COMPLETE (`execute_plan_questions`; the unused `search_web`/`search_academic`/`search_wiki`/`extract_url` methods were removed in TASK-016)
 - Authority-weighted source ranking — COMPLETE
 - Deterministic authority classifier with spoofing resistance — COMPLETE
 - Shared HTTP transport (retry, backoff, rate limiting) — COMPLETE

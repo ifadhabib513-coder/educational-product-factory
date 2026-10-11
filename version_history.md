@@ -440,8 +440,18 @@ honours a spec's `required_gates`, and lets `ConstraintsSpec.evidence_required`
 decide whether a zero-evidence run fails or merely warns. The no-op `seed` knob
 was deleted from the CLI, `RunContext`, and the manifest; the stale
 `schema_validity` default is gone; `date_span` returns POSIX floats; and the
-`overall_status` rollup rule is documented. The remaining audit workstream is
-dead-code removal and the coverage gate (TASK-016).
+`overall_status` rollup rule is documented.
+
+**Dead scaffolding is gone and coverage is now enforced (TASK-016).** The audit's
+architecture-drift sweep found a `service.py` whose public surface was mostly unused,
+an unwired `discovery/validation.py`, and a ring of single-line scaffolding packages
+(`agents/`, `crews/`, `prompts/`, `api/`, `qa/`, `rendering/`, `revision/`, `tools/`,
+and more) that no shipped path imported. Those, the crew contracts, the dead
+`models/registry.py` prompt machinery, `domain/evidence.py`, and the never-emitted
+`EventType` members are removed, so every remaining module has a reachable consumer
+and no `__all__` advertises a name that is not used. The payoff is a clean, honest
+coverage floor: `pytest` now fails below **97%** (`--cov-fail-under`), running at
+97.81% over 881 passing tests.
 
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is

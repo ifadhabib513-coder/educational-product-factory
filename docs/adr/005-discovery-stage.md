@@ -95,3 +95,14 @@ It carries caller intent, which is legitimately partial and vague. Inheriting `A
 **Let the Product Strategist also do the web research.** Rejected — it removes the boundary between "what should we build" and "does anyone want it", and invites the product to fit the available search results.
 
 **Number the agents in execution order.** Rejected — the numbers appear throughout the planning documents and roadmap; renumbering would break those references for no functional gain. The mismatch is resolved by documenting execution order in the contract instead.
+
+## Amendment — 2026-10-11 (TASK-016)
+
+The `check_discovery_brief`/`check_outcome_references`/`check_feasibility`/
+`check_discovery_chain` functions (formerly `lpf/discovery/validation.py`) and the
+`lpf/crews/discovery` contract scaffolding were **never wired to a shipped path** and
+have been removed: `lpf/orchestration/discovery_stage.py` is the single deterministic
+implementation, and pydantic construction enforces every artifact shape at the point
+of creation. The traceability *intent* above still holds — it is simply inlined into
+the stage rather than deferred to a separate, unrun validator. See the whole-codebase
+audit (`docs/audits/codebase-gaps-and-bugs.md`, §5).

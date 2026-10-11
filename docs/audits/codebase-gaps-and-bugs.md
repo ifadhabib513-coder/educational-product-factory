@@ -142,6 +142,11 @@ every gate name emitted by qa_stage appears in exactly one revision set.
 
 ## 5. Dead code / architecture drift (P3 — removes the coverage churn)
 
+**Resolved in TASK-016 (Phase E):** the service methods, `discovery/validation.py`,
+the scaffolding packages, `domain/evidence.py`, `models/registry.py`, the `prompts/`
+templates, and the unreachable `EventType` members below were all removed. The
+"parallel model duplication" item remains open as a future ADR (out of scope).
+
 - **`lpf/research/service.py` at 62% coverage** — most public methods unused by the pipeline
   (`search_web`/`search_academic`/`search_wiki`/`extract_url`/`rank_sources`/`verify_source`/
   `execute_plan`); only `execute_plan_questions` is used. Fix-or-remove.
@@ -165,11 +170,16 @@ every gate name emitted by qa_stage appears in exactly one revision set.
 
 ## 6. Coverage targets for the next milestone
 
-| Package | Current | Target (after P3 removals) |
-|---|---|---|
-| `research/service.py` | 62% | ≥ 80% (or removed) |
-| `models/registry.py` | 70% | ≥ 80% |
-| `cli.py` | 91% | ≥ 95% |
+Resolved by TASK-016 (Phase E). `research/service.py` and `models/registry.py` were
+removed or trimmed to their reachable surface; `cli.py` is now covered by the
+failure-reporting and live-research tests.
+
+| Package | Before | After TASK-016 | Target |
+|---|---|---|---|
+| `research/service.py` | 62% | removed (1 method kept, 100%) | ≥ 80% (or removed) |
+| `models/registry.py` | 70% | removed (dead prompt machinery) | ≥ 80% |
+| `cli.py` | 91% | 99% | ≥ 95% |
+| **Total** | 96% | **97.81%** (881 passing) | `--cov-fail-under=97` |
 
 ---
 
@@ -197,9 +207,16 @@ Each phase = its own TASK entry in `tasks.md`, with: implementation, regression 
   `SKIPPED`/`NOT_APPLICABLE` do not roll up; `ConstraintsSpec.evidence_required` now
   makes a zero-evidence run fail or merely warn.)
 - **Phase E — dead code removal (the coverage lever):** items 5.* scoped removals, then
-  re-run coverage and record new numbers.
-- **Phase F — docs + milestone:** ROADMAP/version_history update, coverage gate, milestone
-  bump.
+  re-run coverage and record new numbers. **DONE — TASK-016.**
+  (`research/service.py` trimmed to the one method the pipeline uses; `discovery/validation.py`
+  and its tests deleted; all scaffolding packages (`agents/`, `crews/`, `api/`, `content/`,
+  `exercises/`, `learning/`, `memory/`, `qa/`, `rendering/`, `review/`, `revision/`, `tools/`,
+  `verification/`, `prompts/`) deleted along with `schemas/contract.py`, the dead
+  `models/registry.py` prompt machinery, `domain/evidence.py`, and the unreachable
+  `EventType.STAGE_FAILED`/`VALIDATION_WARNING` members; the `crew`/`render`/`api`/`all`
+  extras left `pyproject.toml`. Suite 881 passing; total coverage
+  97.81% with a `--cov-fail-under=97` gate now in `[tool.pytest.ini_options]`.)
+- **Phase F — docs + milestone:** ROADMAP/version_history update, milestone bump.
 
 ## 8. Proposed task tracking
 
