@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from lpf.domain.content import SolutionStep
 from lpf.domain.worked_example import WorkedExampleDraft
+from lpf.errors import WorkflowError
 
 
 def _digest(text: str) -> str:
@@ -79,9 +80,12 @@ class DeterministicMockModel:
                 final_answer="The problem is solved and the result checked.",
                 common_errors=["Skips the check step."],
             )
-        raise ValueError(
-            f"DeterministicMockModel cannot produce '{schema.__name__}'; "
-            "register a deterministic reply for it or use a live provider."
+        raise WorkflowError(
+            code="UNSUPPORTED_SCHEMA",
+            message=(
+                f"DeterministicMockModel cannot produce '{schema.__name__}'; "
+                "register a deterministic reply for it or use a live provider."
+            ),
         )
 
     @staticmethod

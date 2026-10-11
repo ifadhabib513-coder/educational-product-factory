@@ -157,6 +157,27 @@ class TestPromptRegistry:
         )
         assert registry.list_prompts() == ["alpha", "beta"]
 
+
+class TestDeterministicMockModelGuards:
+    """The offline model refuses schemas it has no deterministic reply for with
+    a typed ``WorkflowError``, so the run loop reports it instead of crashing."""
+
+    async def test_unknown_schema_raises_workflow_error(self) -> None:
+        from pydantic import BaseModel
+
+        from lpf.errors import WorkflowError
+        from lpf.orchestration.model import DeterministicMockModel
+
+        class NeverAskedFor(BaseModel):
+            value: int
+
+        model = DeterministicMockModel()
+        with pytest.raises(WorkflowError) as excinfo:
+            await model.generate(
+                messages=[{"role": "user", "content": "anything"}], schema=NeverAskedFor
+            )
+        assert excinfo.value.code == "UNSUPPORTED_SCHEMA"
+
     def test_render_user(self) -> None:
         template = PromptTemplate(
             name="test",

@@ -290,8 +290,14 @@ class TestRoutingTable:
     def test_one_non_repairable_gate_poisons_the_whole_failure_set(self) -> None:
         assert route_failed_gates(["factual_consistency", "research_evidence"]) is None
 
+    def test_factual_consistency_is_unowned_because_its_inputs_are_research(self) -> None:
+        assert route_failed_gates(["factual_consistency"]) is None
+
     def test_content_wins_over_assessment_in_a_mixed_failure(self) -> None:
-        assert route_failed_gates(["answer_references", "factual_consistency"]) is RunStage.CONTENT
+        assert (
+            route_failed_gates(["answer_references", "misconception_references"])
+            is RunStage.CONTENT
+        )
 
     def test_the_ownership_sets_do_not_overlap(self) -> None:
         assert not CONTENT_GATES & ASSESSMENT_GATES

@@ -202,16 +202,6 @@ def build_qa(
     question_ids = {question.id for question in questions}
 
     gate_list: list[QualityGate] = [
-        with_content_hash(
-            QualityGate(
-                id=ctx.id("gate"),
-                created_at=ctx.now(),
-                checked_at=ctx.now(),
-                gate_name="schema_validity",
-                status=GateStatus.PASSED,
-                score=1.0,
-            )
-        ),
         _coverage_gate(ctx, objectives=objectives, blueprint=blueprint),
         _gate_from_result(
             ctx,

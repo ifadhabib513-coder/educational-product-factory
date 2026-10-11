@@ -307,13 +307,23 @@ class FactoryPipeline:
             )
 
         except LpfError as error:
-            state.fail(f"{error.code}: {error.message}", at=ctx.now())
-            events.emit(
-                EventType.RUN_FAILED,
-                stage=state.stage,
-                message=f"{error.code}: {error.message}",
-                timestamp=ctx.now(),
-            )
+            reason = f"{error.code}: {error.message}"
+            if state.is_terminal:
+                # Packaging runs after the machine reached COMPLETE, so there is
+                # no legal FAILED edge left to take. Re-entering the machine
+                # (state.fail -> advance(FAILED)) would raise WorkflowError and
+                # turn a packaging failure into a crash. Record the failure on
+                # the result instead; package stays None, which tells callers
+                # nothing was written.
+                state.failure_reason = reason
+            else:
+                state.fail(reason, at=ctx.now())
+                events.emit(
+                    EventType.RUN_FAILED,
+                    stage=state.stage,
+                    message=reason,
+                    timestamp=ctx.now(),
+                )
             return FactoryRunResult(
                 run_id=run_id,
                 state=state,

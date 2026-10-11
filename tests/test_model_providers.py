@@ -17,7 +17,12 @@ import pytest
 from pydantic import BaseModel
 
 from lpf.errors import ConfigError, LpfError, ProviderError, ValidationError
-from lpf.models import OllamaModel, OpenAICompatibleModel, create_live_model
+from lpf.models import (
+    HttpChatModel,
+    OllamaModel,
+    OpenAICompatibleModel,
+    create_live_model,
+)
 from lpf.models.provider import ModelProvider
 from lpf.orchestration.model import protocol_satisfied
 from lpf.orchestration.pipeline import FactoryPipeline
@@ -355,12 +360,29 @@ class TestProviderResilience:
 
 class TestCreateLiveModel:
     def test_builds_openai_compatible(self) -> None:
+        provider = create_live_model("openai-compatible", api_key="k", client=_client(_json200))
+        assert isinstance(provider, OpenAICompatibleModel)
+        assert OpenAICompatibleModel.kind == "openai-compatible"
+
+    def test_openai_kind_underscore_alias_resolves(self) -> None:
         provider = create_live_model("openai_compatible", api_key="k", client=_client(_json200))
         assert isinstance(provider, OpenAICompatibleModel)
 
     def test_builds_ollama(self) -> None:
         provider = create_live_model("ollama", client=_client(_json200))
         assert isinstance(provider, OllamaModel)
+
+    @pytest.mark.parametrize("kind", ["ollama", "OLLAMA", " oLLaMa"])
+    def test_kind_lookup_is_case_and_whitespace_insensitive(self, kind: str) -> None:
+        provider = create_live_model(kind, client=_client(_json200))
+        assert isinstance(provider, OllamaModel)
+
+    @pytest.mark.parametrize("kind", ["openai-compatible", "openai_compatible", "ollama"])
+    def test_cli_advertised_kinds_resolve_via_the_real_factory(self, kind: str) -> None:
+        """The CLI passes ``kind.lower()`` straight to the factory, so every
+        advertised ``--model`` / ``LPF_PROVIDER`` value must resolve there."""
+        provider = create_live_model(kind, timeout_seconds=1, client=_client(_json200))
+        assert isinstance(provider, HttpChatModel)
 
     def test_unknown_kind_raises_config_error(self) -> None:
         with pytest.raises(ConfigError) as excinfo:

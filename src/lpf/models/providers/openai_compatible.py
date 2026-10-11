@@ -23,7 +23,7 @@ __all__ = ["OpenAICompatibleModel"]
 class OpenAICompatibleModel(HttpChatModel):
     """A chat-completions model reached over an OpenAI-compatible API."""
 
-    kind = "openai_compatible"
+    kind = "openai-compatible"
     endpoint = "/chat/completions"
     default_model = "gpt-4o-mini"
     default_base_url = "https://api.openai.com/v1"

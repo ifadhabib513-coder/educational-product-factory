@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from lpf.errors import ValidationError
+from lpf.errors import RenderingError, ValidationError
 from lpf.orchestration import pipeline as pipeline_module
 from lpf.orchestration.pipeline import FactoryPipeline
 from lpf.orchestration.state import RunStage
@@ -98,3 +98,46 @@ class TestUnexpectedFailure:
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
         with pytest.raises(RuntimeError, match="a genuine bug"):
             await pipeline.run(_inputs(), run_id="crash")
+
+
+class TestStructuredReplyFailure:
+    """A model that returns text for a schema'd request was a raw ``ValueError``
+    escape (CLI traceback, no failed run). It must surface as a failed run via a
+    typed ``ProviderError``."""
+
+    class _TextModel:
+        async def generate(self, *, messages, schema=None, **kwargs) -> str:
+            return "plain text" if schema is None else "text when a draft was expected"
+
+        async def count_tokens(self, text: str) -> int:
+            return len(text.split())
+
+    async def test_text_reply_for_structured_call_fails_the_run(self, tmp_path: Path) -> None:
+        pipeline = FactoryPipeline(output_dir=str(tmp_path), model=self._TextModel())
+        result = await pipeline.run(_inputs(), run_id="text-model")
+        assert not result.succeeded
+        assert result.state.stage is RunStage.FAILED
+        assert result.state.failure_reason is not None
+        assert "STRUCTURED_REPLY_REQUIRED" in result.state.failure_reason
+        assert result.events.events[-1].event_type.value == "run_failed"
+
+
+class TestPackagingFailure:
+    async def test_packaging_failure_after_completion_does_not_crash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def boom(*args: object, **kwargs: object) -> None:
+            raise RenderingError(code="RENDER_DISK", message="disk full")
+
+        monkeypatch.setattr(pipeline_module, "package_run", boom)
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        result = await pipeline.run(_inputs(), run_id="package-fail")
+
+        # The machine reached COMPLETE before packaging, so there is no FAILED
+        # edge to take. The handler must not crash (previously WorkflowError
+        # escaped); the failure is recorded and nothing is written.
+        assert result.succeeded
+        assert result.package is None
+        assert result.state.failure_reason is not None
+        assert "RENDER_DISK" in result.state.failure_reason
+        assert result.events.events[-1].event_type.value == "run_completed"

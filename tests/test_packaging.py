@@ -75,7 +75,7 @@ Another paragraph.
 
 | Gate | Status |
 | --- | --- |
-| schema_validity | passed |
+| factual_consistency | passed |
 | numerical_consistency | failed |
 """
 
@@ -115,7 +115,7 @@ class TestMarkdownToHtml:
         assert "<table>" in html
         assert "<thead>" in html
         assert _normalize(html).count("<th>") == 2
-        assert "<td>schema_validity</td><td>passed</td>" in _normalize(html)
+        assert "<td>factual_consistency</td><td>passed</td>" in _normalize(html)
 
     def test_inline_emphasis(self) -> None:
         html = markdown_to_html("A **bold** and *italic* and `code` span.")

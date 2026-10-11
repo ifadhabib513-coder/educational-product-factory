@@ -32,11 +32,13 @@ __all__ = [
 ]
 
 #: Gates whose evidence lives in the content stage (``lessons``,
-#: ``worked_examples``, ``misconceptions``).
+#: ``worked_examples``, ``misconceptions``). ``factual_consistency`` is *not*
+#: owned here: its inputs are research artifacts (``evidence_map.claims``,
+#: ``verified_source_ids``) that the content rebuild does not touch, so a content
+#: re-run can never clear it — it belongs in :data:`NON_REPAIRABLE_GATES`.
 CONTENT_GATES: Final[frozenset[str]] = frozenset(
     {
         "misconception_references",
-        "factual_consistency",
         "numerical_consistency",
     }
 )
@@ -54,14 +56,17 @@ ASSESSMENT_GATES: Final[frozenset[str]] = frozenset(
 
 #: The named gates a content or assessment re-run cannot clear: their inputs
 #: come from stages the revision cycle does not revisit (discovery, research,
-#: syllabus) or from run configuration itself. Every one of them is unowned, and
-#: any gate outside the two owned sets is unowned too.
+#: syllabus) or from run configuration itself. ``factual_consistency`` sits here
+#: because its evidence lives in research, which the revision cycle never
+#: revisits; ``schema_validity`` is absent because schema conformance is enforced
+#: by pydantic at construction and no gate exists to route. Every one of these is
+#: unowned, and any gate outside the two owned sets is unowned too.
 NON_REPAIRABLE_GATES: Final[frozenset[str]] = frozenset(
     {
-        "schema_validity",
         "curriculum_coverage",
         "objective_references",
         "research_evidence",
+        "factual_consistency",
         "required_gates_present",
     }
 )

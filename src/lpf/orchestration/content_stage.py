@@ -23,6 +23,7 @@ from lpf.domain.lesson import Lesson
 from lpf.domain.misconception import Misconception, MisconceptionSeverity
 from lpf.domain.objectives import BloomLevel, LearningObjective
 from lpf.domain.worked_example import WorkedExample, WorkedExampleDraft
+from lpf.errors import ProviderError
 from lpf.models.provider import ModelProvider
 from lpf.orchestration.context import RunContext
 
@@ -84,9 +85,12 @@ async def _write_worked_example(
         schema=WorkedExampleDraft,
     )
     if isinstance(reply, str):
-        raise ValueError(
-            "WorkedExampleDraft requested but the model returned text; "
-            "a structured reply is required for worked examples."
+        raise ProviderError(
+            code="STRUCTURED_REPLY_REQUIRED",
+            message=(
+                "WorkedExampleDraft requested but the model returned text; "
+                "a structured reply is required for worked examples."
+            ),
         )
     return reply
 

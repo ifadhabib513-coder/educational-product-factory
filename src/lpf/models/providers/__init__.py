@@ -18,6 +18,16 @@ _KIND_CLASSES: dict[str, type[HttpChatModel]] = {
 }
 
 
+def _normalize_kind(kind: str) -> str:
+    """Fold a provider kind to its canonical name.
+
+    ``openai_compatible`` and ``OPENAI-COMPATIBLE`` both resolve to the
+    canonical ``openai-compatible``, so the CLI/env spelling and the class
+    ``kind`` never drift into an ``UNKNOWN_MODEL_KIND`` again.
+    """
+    return kind.strip().lower().replace("_", "-")
+
+
 def create_live_model(
     kind: str,
     *,
@@ -34,8 +44,9 @@ def create_live_model(
     omitted each adapter builds a real client with a timeout. ``retry`` and
     ``timeout_seconds`` configure the bounded retry/backoff policy.
     """
+    normalized = _normalize_kind(kind)
     try:
-        cls = _KIND_CLASSES[kind]
+        cls = _KIND_CLASSES[normalized]
     except KeyError as exc:
         raise ConfigError(
             code="UNKNOWN_MODEL_KIND",

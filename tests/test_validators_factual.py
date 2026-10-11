@@ -210,6 +210,9 @@ class TestQaGateWiring:
 
         assert not result.succeeded
         assert result.state.stage is RunStage.FAILED
+        # The gate's evidence is research-owned, so the revision cycle cannot
+        # repair it: the run aborts immediately instead of burning the budget.
+        assert result.state.revisions == 0
         assert result.package is None
         assert not (tmp_path / "fact-fail").exists()
         verification = result.verification
@@ -229,6 +232,15 @@ class TestQaGateWiring:
         names = [gate.gate_name for gate in result.verification.gates]  # type: ignore[union-attr]
         assert "factual_consistency" in names
         assert "required_gates_present" in names
+
+    async def test_schema_conformance_has_no_decorative_gate(self, tmp_path: Path) -> None:
+        """Pydantic enforces schemas at construction, so no ``schema_validity``
+        gate is emitted (the old one was hard-wired PASSED and could never fail)."""
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        result = await pipeline.run(_inputs(), run_id="schema-none", seed="s")
+        assert result.succeeded
+        names = [gate.gate_name for gate in result.verification.gates]  # type: ignore[union-attr]
+        assert "schema_validity" not in names
 
 
 class TestEvidenceCatalogueIsLive:
