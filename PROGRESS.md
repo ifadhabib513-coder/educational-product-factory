@@ -14,10 +14,11 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 7 | 2026-10-11 | TASK-007 | Live Model Provider Adapters (OpenAI-compatible + Ollama) with structured-output validation | Completed | `e9b8f7f` |
 | 8 | 2026-10-11 | TASK-008 | Provider Resilience (bounded retry, timeout, deterministic backoff) | Completed | `07bbadc` |
 | 9 | 2026-10-11 | TASK-009 | Revision Loop Repairs a Model-Written Worked-Example Defect (model-written worked examples, QA feedback threaded into rebuilds) | Completed | `56aac58` |
+| 10 | 2026-10-11 | TASK-010 | Route Retrieval by Query Intent (per-question provider pruning keyed on intent) | Completed | `34e38d1` |
 
-> **v0.8.0 milestone in progress** — TASK-007, TASK-008 and TASK-009 are complete
-> (live model seam + resilience + model-written repair proof). Remaining:
-> TASK-010 intent-aware retrieval routing, TASK-011 CLI/config exposure.
+> **v0.8.0 milestone in progress** — TASK-007 through TASK-010 are complete
+> (live model seam + resilience + model-written repair proof + intent-aware
+> retrieval). Remaining: TASK-011 CLI/config exposure.
 
 ---
 ## Detailed Iteration Logs
@@ -155,3 +156,16 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 159 files already formatted.
   - Mutation-tested (4/4 caught): pipeline drops the feedback, content stage ignores the feedback, content writes a canned template instead of the draft's fields, mock returns an empty step list.
   - `tests/test_model_revision_loop.py`: first draft `3 + 4 = 8` fails `numerical_consistency`; rebuild (prompt carries the failure) writes `3 + 4 = 7`; run completes with `VerificationResult.iteration == 2`, `revisions == 1`, `(QA, CONTENT)` hop, only the repaired verification shipped with the gate passed; repaired and exhausted runs are byte-identical across two runs; constant-defect run fails on "revision budget" after `MAX_REVISIONS`.
+
+### Iteration 10 — 2026-10-11: TASK-010
+- **Task**: Route retrieval by query intent — prune the per-question provider set so a beginner's definitional query is never sent to arXiv, where preprints the scorer rejects by design arrive as pure noise.
+- **Rationale**: "Retrieval is unrefined: questions are sent to every provider regardless of intent" (`version_history.md`). The intent-conditional *scorer* (TASK-001) knew preprints fit a definition poorly, but they were still retrieved and then buried — a retrieval-side fix is cleaner and cheaper.
+- **Changes**:
+  - New `src/lpf/research/routing.py`: `provider_suitability(intent)` (the intent→provider table) and `prune_providers(intent, providers)` (never-empty, order-preserving, deduping prune). `ARXIV` is excluded for DEFINITIONAL/EXPLANATORY/PROCEDURAL; `WIKIMEDIA` is excluded for ACADEMIC_LITERATURE/EVIDENCE_SYNTHESIS/CURRENT; `GENERAL` keeps every provider. `MOCK`/`OFFICIAL` sit in every set (offline determinism can never be pruned away) and an empty suitable-intersection falls back to the caller's full set (a lone injected provider still retrieves).
+  - `ResearchRouter.plan` rebuilds each question's strategy: pruned providers + regenerated `SearchQuery`s (preserving per-provider `max_results`). The plan builder in `orchestration/research_stage.py` prunes identically, so the plan artifact and execution agree on which providers ran.
+- **Verification**:
+  - `python -m pytest tests/`: 862 passed (23 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 161 files already formatted.
+  - Mutation-tested (6/6 caught): router keeps all providers, plan builder skips pruning, DEFINITIONAL retains ARXIV, suitability falls back to GENERAL, empty prune not fallen back, router classifies every question as GENERAL.
+  - New `tests/test_research_intent_routing.py` (suitability table, router pruning independent of the plan builder, execution never calls a pruned provider, query budgets survive rebuilds) plus reworked `tests/test_research_provider_injection.py`: a definitional "What is linear algebra?" over injected {ARXIV, WIKIMEDIA} retrieves only encyclopedic sources and never calls the arXiv provider, while "find papers about …" still queries arXiv end-to-end. Offline mock runs unchanged (`prune_providers(MOCK) == (MOCK,)` for every intent).
+  - Live path is the same code — the stage injects live providers and the router prunes them — but needs network to exercise, so it is verified only by the offline suite here.

@@ -385,11 +385,18 @@ on `qa → content` and the run completes on the repair. The offline mock replie
 with the unchanged canonical template, so the default run is still byte-identical
 run to run.
 
+**Retrieval is now intent-aware.** Since TASK-010, each research question is
+routed to the providers that can actually serve it: `ARXIV` is pruned out of
+definitional/explanatory/procedural questions (a beginner's "what is X?" no
+longer scrapes preprints the scorer rejects by design) and `WIKIMEDIA` out of
+paper-hunting intents. The prune is never-empty, so the deterministic offline
+provider still retrieves every run, and the plan artifact records the same
+providers the router executes.
+
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is
 now real, though: TASK-007 added OpenAI-compatible and Ollama adapters behind
 the existing `ModelProvider` protocol, with structured-output validation that
-turns malformed replies into typed failures. Retrieval is also unrefined:
-questions are sent to every provider regardless of intent, so a beginner's
-definitional query still retrieves preprints that the scorer rejects by design.
-Output is Markdown/JSON/HTML rather than a rendered book.
+turns malformed replies into typed failures. Output is Markdown/JSON/HTML
+rather than a rendered book, and `lpf generate` still selects the provider by
+CLI/config seam only (TASK-011).
