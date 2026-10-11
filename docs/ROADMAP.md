@@ -236,7 +236,7 @@
 - Examples
 - Contribution guide
 - Security policy
-- License
+- License — Proprietary (`LicenseRef-Proprietary`); no open release
 - CI quality checks
 - Demo projects
 

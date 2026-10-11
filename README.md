@@ -43,4 +43,6 @@ Pre-alpha. Stage 1 complete (project foundation). See `docs/ROADMAP.md` for prog
 
 ## License
 
-None granted. All rights reserved.
+**Proprietary — all rights reserved.** This project is private and is not open
+source. No rights are granted to copy, modify, distribute, or otherwise use any
+part of it. Distributions declare `LicenseRef-Proprietary`.

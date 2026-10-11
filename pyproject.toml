@@ -7,6 +7,7 @@ name = "lpf"
 version = "0.1.0"
 description = "AI Educational Product Factory — subject-agnostic learning product generation"
 readme = "README.md"
+license = "LicenseRef-Proprietary"
 requires-python = ">=3.11"
 authors = [
     { name = "AI Educational Product Factory Contributors" },

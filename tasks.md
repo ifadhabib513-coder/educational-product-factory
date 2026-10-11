@@ -57,5 +57,53 @@
 ---
 
 > **v0.7.0 milestone complete.** TASK-001 through TASK-006 are all checked. The
-> next iteration should start a new milestone section (v0.7.x / v0.8.0) rather
-> than hunting for an unfinished `[ ]` above.
+> next iteration should start a new milestone section rather than hunting for an
+> unfinished `[ ]` above.
+
+---
+
+## v0.8.0 Milestone Tasks — Live Content (real writers behind the same seam)
+
+> Motivation (from `version_history.md`): "the writing is the last major
+> fiction." Evidence is already real (`--live-research`); lesson prose is still
+> `DeterministicMockModel` text. These tasks turn the content stage from a mock
+> into a real LLM call through the existing `ModelProvider` seam, keep the
+> offline default byte-identical, and prove TASK-006's revision loop repairs a
+> model-written defect. Assign the next sequence number; new tasks go to the
+> newest section only, never the completed one.
+
+- [ ] **TASK-007**: Implement Live Model Provider Adapters (OpenAI-compatible and Ollama)
+  - **Objective**: Turn `src/lpf/models/provider.py` into a real provider layer (ROADMAP Stage 7) — implement the existing `ModelProvider` protocol for OpenAI-compatible and Ollama HTTP endpoints, selectable per-run without touching any stage code. Structured output: lesson JSON parsed and pydantic-validated so a malformed reply is a typed `ValidationError` that fails the run, never a silent artifact.
+  - **Acceptance Criteria**:
+    - Adapters conform to `ModelProvider` and are injected via `FactoryPipeline(model=...)`; the offline default stays `DeterministicMockModel`.
+    - Malformed provider output (bad JSON, wrong schema) raises `ValidationError` and fails the run before QA.
+    - Unit tests use a deterministic fake HTTP transport; `tests/` never touches the network.
+    - Full pytest suite and ruff linters pass.
+
+- [ ] **TASK-008**: Add Provider Resilience (retry, timeout, backoff)
+  - **Objective**: Hosts fail; a content run must neither crash nor hang. Add bounded retry, timeout, and exponential backoff to live model calls and surface a stable `ProviderError` (an `LpfError`) when a provider stays down.
+  - **Acceptance Criteria**:
+    - A flaky fake provider (fails once then succeeds) completes; a constant-failure fake provider fails the run with a readable, deterministic message.
+    - Retries are budgeted (no unbounded loops), reusing the HTTP transport patterns already in `research/transport.py`.
+    - Unit tests with flaky/always-failing fake providers; full pytest suite and ruff linters pass.
+
+- [ ] **TASK-009**: Prove the Revision Loop Repairs a Model-Written Defect
+  - **Objective**: TASK-006's cycle must hold with a real writer, not just an injected one: a (fake) live model that emits a wrong worked-example answer on its first draft is retried on the `qa → content` re-run, and the run completes.
+  - **Acceptance Criteria**:
+    - End-to-end test where the first draft fails `numerical_consistency` (or `factual_consistency`) and the repaired draft passes; `VerificationResult.iteration == 2`.
+    - On-disk output is byte-identical across two identical runs; the budget-exhausted variant still fails cleanly.
+    - Full pytest suite and ruff linters pass.
+
+- [ ] **TASK-010**: Route Retrieval by Query Intent
+  - **Objective**: "Retrieval is unrefined: questions are sent to every provider regardless of intent" (`version_history.md`). Prune the provider list per question so a beginner's definitional query does not retrieve preprints the scorer rejects by design.
+  - **Acceptance Criteria**:
+    - Per-question provider filtering/weighting keyed on intent, implemented in `research` (not in tests); offline mock behaviour unchanged or strictly improved.
+    - Regression tests: definitional/explainatory queries no longer rank preprint-type sources ahead of encyclopedic ones for the canonical topic.
+    - Live `--live-research` run still succeeds; full pytest suite and ruff linters pass.
+
+- [ ] **TASK-011**: Expose Model Provider Selection in CLI and Config
+  - **Objective**: `lpf generate` can choose the writer: `--model mock|openai-compatible|ollama` plus env/`lpf.toml` for endpoint and key, defaulting to `mock` (offline). README documents the matrix and that offline is the default safe path.
+  - **Acceptance Criteria**:
+    - CLI flag and env/config parse; `--model mock` produces the current byte-identical output.
+    - README documents providers, env vars, and the offline default.
+    - CLI tests run offline with the mock provider; full pytest suite and ruff linters pass.
