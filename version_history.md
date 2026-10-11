@@ -377,6 +377,14 @@ deterministic exponential backoff and a configurable timeout, so a flaky host
 is absorbed and a provider that stays down fails the run with a stable, readable
 `ProviderError` instead of hanging.
 
+**The repair loop now holds with a model, not just an injected defect.** Since
+TASK-009, worked examples are written by the model against a structured
+`WorkedExampleDraft`, and a failed `numerical_consistency` gate sends the failure
+back into the rebuild prompt as QA feedback — so a wrong first draft is retried
+on `qa → content` and the run completes on the repair. The offline mock replies
+with the unchanged canonical template, so the default run is still byte-identical
+run to run.
+
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is
 now real, though: TASK-007 added OpenAI-compatible and Ollama adapters behind

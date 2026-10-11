@@ -13,9 +13,10 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 6 | 2026-10-08 | TASK-006 | Bounded Cyclic Stage Machine Revision Loop | Completed | `b116f0c` |
 | 7 | 2026-10-11 | TASK-007 | Live Model Provider Adapters (OpenAI-compatible + Ollama) with structured-output validation | Completed | `e9b8f7f` |
 | 8 | 2026-10-11 | TASK-008 | Provider Resilience (bounded retry, timeout, deterministic backoff) | Completed | `07bbadc` |
+| 9 | 2026-10-11 | TASK-009 | Revision Loop Repairs a Model-Written Worked-Example Defect (model-written worked examples, QA feedback threaded into rebuilds) | Completed | `56aac58` |
 
-> **v0.8.0 milestone in progress** — TASK-007 and TASK-008 are complete
-> (live model seam + resilience). Remaining: TASK-009 revision-loop proof,
+> **v0.8.0 milestone in progress** — TASK-007, TASK-008 and TASK-009 are complete
+> (live model seam + resilience + model-written repair proof). Remaining:
 > TASK-010 intent-aware retrieval routing, TASK-011 CLI/config exposure.
 
 ---
@@ -140,3 +141,17 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 158 files already formatted.
   - Mutation-tested (8/8 caught): retry loop pinned to one attempt, loop unbounded up to 10, retryable-status branch disabled, transport-retry replaced with a re-raise, lost `last_failure` recording, message dropping the attempt count, backoff sleep disabled, HTTP-error guard dropped.
   - New tests: flaky status/transport recovery (recovered after 3 tries), bounded call count on constant failure, non-retryable 401 never replayed, deterministic exhaustion message with `last_failure`, recorded backoff delays `[0.25, 0.5]` (backoff_multiplier 2.0), and an end-to-end constant-failure run whose `failure_reason` carries `PROVIDER_REQUEST_FAILED` and `3 attempt(s)`.
+
+### Iteration 9 — 2026-10-11: TASK-009
+- **Task**: Prove the revision loop repairs a **model-written** defect — a fake live model writes a wrong worked-example answer on its first draft, is retried on the `qa → content` re-run, and the run completes.
+- **Rationale**: TASK-006 proved the cycle with a monkeypatched defect. The real writer seam (TASK-007) meant the "defect" should come from the model the pipeline actually calls, and repair should be driven by actually telling the writer what QA found.
+- **Changes**:
+  - New `WorkedExampleDraft` writer schema in `src/lpf/domain/worked_example.py` — the authored content only (no artifact identity), which the Content stage stamps with `id`/`created_at`/`parent_id`/`source_refs`.
+  - `content_stage.py`: APPLY-unit worked examples are now produced by `_write_worked_example()` (a structured `model.generate(schema=WorkedExampleDraft)`), so bad arithmetic is the writer's defect. `build_content` gains `feedback`; the prompt carries "The previous draft failed QA: …" on a rebuild, so a second draft is a repair, not a repeat.
+  - `pipeline.py`: on a `qa → content` rewind, `_revision_feedback(verification)` collapses the failed gates' problems into a deterministic repair instruction passed into the rebuild.
+  - `orchestration/model.py`: `DeterministicMockModel` answers `WorkedExampleDraft` with exactly the old canonical template, so the offline package stays byte-identical; any other schema is still refused loudly.
+- **Verification**:
+  - `python -m pytest tests/`: 839 passed (5 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 159 files already formatted.
+  - Mutation-tested (4/4 caught): pipeline drops the feedback, content stage ignores the feedback, content writes a canned template instead of the draft's fields, mock returns an empty step list.
+  - `tests/test_model_revision_loop.py`: first draft `3 + 4 = 8` fails `numerical_consistency`; rebuild (prompt carries the failure) writes `3 + 4 = 7`; run completes with `VerificationResult.iteration == 2`, `revisions == 1`, `(QA, CONTENT)` hop, only the repaired verification shipped with the gate passed; repaired and exhausted runs are byte-identical across two runs; constant-defect run fails on "revision budget" after `MAX_REVISIONS`.
