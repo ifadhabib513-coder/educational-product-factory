@@ -7,8 +7,12 @@ artifact.
 Two properties are enforced rather than assumed:
 
 * **Reproducible bytes.** Entry order is sorted, every entry carries a fixed
-  DOS timestamp and fixed Unix mode, and ``create_system`` is pinned, so two
-  runs with the same inputs produce a byte-identical archive on any platform.
+  DOS timestamp and fixed Unix mode, and ``create_system`` is pinned, so the
+  archive layout and per-entry metadata are identical across platforms and
+  runs. The compressed bytes are fixed for a given zlib implementation, so
+  two runs with the same inputs produce a byte-identical archive on the same
+  platform/Python build (across OSes the deflate stream may differ with the
+  zlib version, which is outside this module's control).
 * **No self-inclusion.** The archive is assembled from an explicit member
   list, so ``<run_id>.zip`` can safely live inside the directory it packages.
 """

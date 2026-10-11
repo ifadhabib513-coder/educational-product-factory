@@ -11,10 +11,13 @@ asks for one.
 
 from __future__ import annotations
 
+import math
 import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from lpf.errors import ConfigError
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,29 @@ def _load_toml(path: Path | None) -> dict[str, str | None]:
     return toml
 
 
+def _parse_timeout(raw: str) -> int:
+    """Parse a timeout in seconds, or raise a readable ``ConfigError``.
+
+    Accepts an integer or decimal string (``"120"``, ``"1.5"``) so a
+    non-integer value cannot crash startup with a bare ``ValueError``. A
+    non-numeric or non-positive value is a configuration mistake and is
+    reported as such.
+    """
+    try:
+        seconds = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(
+            code="INVALID_TIMEOUT",
+            message=f"LPF_TIMEOUT must be a positive number of seconds, got {raw!r}.",
+        ) from exc
+    if not seconds > 0 or not math.isfinite(seconds):
+        raise ConfigError(
+            code="INVALID_TIMEOUT",
+            message=f"LPF_TIMEOUT must be a positive number of seconds, got {raw!r}.",
+        )
+    return max(1, round(seconds))
+
+
 def load_config(path: str | os.PathLike | None = None) -> LpfConfig:
     """Load configuration from ``lpf.toml`` (optional) and environment.
 
@@ -121,7 +147,7 @@ def load_config(path: str | os.PathLike | None = None) -> LpfConfig:
         log_level=str(values["log_level"]),
         output_dir=str(values["output_dir"]),
         provider=str(values["provider"]),
-        timeout_seconds=int(values["timeout_seconds"]),
+        timeout_seconds=_parse_timeout(str(values["timeout_seconds"])),
         model_name=values["model_name"],
         model_endpoint=values["model_endpoint"],
         api_key=values["api_key"],

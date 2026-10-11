@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from lpf.errors import RenderingError, ValidationError
+from lpf.errors import ConfigError, RenderingError, ValidationError
 from lpf.orchestration import pipeline as pipeline_module
 from lpf.orchestration.pipeline import FactoryPipeline
 from lpf.orchestration.state import RunStage
@@ -24,6 +24,34 @@ def _inputs() -> DiscoveryInputs:
         subject="linear algebra",
         level="year 10",
     )
+
+
+class TestRunIdValidation:
+    """A run id becomes a path, so the pipeline boundary must reject traversal.
+
+    Enforced at ``run`` so a programmatic caller is covered too, not just the CLI.
+    """
+
+    @pytest.mark.parametrize("run_id", ["../outside", "..\\..\\evil", "a/b", "a\\b", "..", ""])
+    async def test_traversal_ids_are_rejected_before_any_write(
+        self, tmp_path: Path, run_id: str
+    ) -> None:
+        out = tmp_path / "out"
+        pipeline = FactoryPipeline(output_dir=str(out))
+        with pytest.raises(ConfigError) as excinfo:
+            await pipeline.run(_inputs(), run_id=run_id)
+        assert excinfo.value.code == "INVALID_RUN_ID"
+        assert not out.exists()
+
+    async def test_ordinary_ids_are_accepted(self, tmp_path: Path) -> None:
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        result = await pipeline.run(_inputs(), run_id="ok-run.1")
+        assert result.run_id == "ok-run.1"
+
+    async def test_over_long_ids_are_rejected(self, tmp_path: Path) -> None:
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        with pytest.raises(ConfigError):
+            await pipeline.run(_inputs(), run_id="x" * 65)
 
 
 class TestQaFailure:

@@ -25,7 +25,10 @@ from lpf.schemas.research import SearchProvider
 def main(ctx: click.Context) -> None:
     """AI Educational Product Factory — generate complete learning products."""
     ctx.ensure_object(dict)
-    config = load_config()
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
     setup_logging(config)
     ctx.obj["config"] = config
 
@@ -94,8 +97,8 @@ def generate(
     research_providers = None
     if live_research:
         research_providers = {
-            SearchProvider.ARXIV: ArxivProvider(),
-            SearchProvider.WIKIMEDIA: WikimediaProvider(),
+            SearchProvider.ARXIV: ArxivProvider(timeout_seconds=config.timeout_seconds),
+            SearchProvider.WIKIMEDIA: WikimediaProvider(timeout_seconds=config.timeout_seconds),
         }
 
     click.echo(f"Generating product: subject={subject}, topic={topic}, level={level}")
@@ -115,7 +118,12 @@ def generate(
         model=model,
         research_providers=research_providers,
     )
-    result = asyncio.run(pipeline.run(inputs, run_id=run_id, seed=seed))
+    try:
+        result = asyncio.run(pipeline.run(inputs, run_id=run_id, seed=seed))
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        asyncio.run(pipeline.aclose())
 
     if not result.succeeded:
         click.echo(f"Run failed at stage '{result.state.stage.value}'.", err=True)

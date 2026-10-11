@@ -76,7 +76,17 @@ class HttpChatModel:
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._owns_client = client is None
         self._client = client or _default_client(timeout_seconds)
+
+    async def aclose(self) -> None:
+        """Close the HTTP client, but only if this model created it.
+
+        An injected client (e.g. a test ``MockTransport``) belongs to the
+        caller; closing it here would break a caller that reuses it.
+        """
+        if self._owns_client:
+            await self._client.aclose()
 
     # ------------------------------------------------------------------ wire
     def request_headers(self) -> dict[str, str]:

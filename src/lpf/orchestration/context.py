@@ -7,8 +7,35 @@ Given the same seed and inputs, a run produces byte-identical artifacts.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+
+from lpf.errors import ConfigError
+
+# A run id becomes a directory name, an archive name, and (through ``ctx.id``)
+# part of every artifact filename. Restrict it to a flat, separator-free slug so
+# ``..\\..\\evil`` or ``sub/nested`` cannot escape the output directory.
+_RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def validate_run_id(run_id: str) -> str:
+    """Return ``run_id`` if it is a safe flat slug, else raise ``ConfigError``.
+
+    Rejects path separators (both ``/`` and ``\\``), parent-directory segments,
+    a leading dot, and empty or over-long ids. Called at the pipeline boundary
+    so both the CLI and programmatic callers are covered.
+    """
+    if not _RUN_ID_PATTERN.match(run_id):
+        raise ConfigError(
+            code="INVALID_RUN_ID",
+            message=(
+                f"Invalid run id {run_id!r}: use 1-64 characters of letters, "
+                "digits, '.', '_' or '-', starting with a letter or digit."
+            ),
+        )
+    return run_id
+
 
 # A fixed, arbitrary epoch. Fixed rather than ``now()`` so runs are reproducible;
 # the value itself carries no meaning.

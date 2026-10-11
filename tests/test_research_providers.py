@@ -587,3 +587,56 @@ class TestProviderContract:
         provider = WikimediaProvider(transport=_transport(_json(WIKIMEDIA_PAYLOAD)))
         results = await provider.search("algebra")
         assert all(r.retrieved_at is not None for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Configured timeout + client lifecycle (TASK-014)
+# ---------------------------------------------------------------------------
+
+
+_PROVIDER_FACTORIES = [
+    lambda **kw: SearxngProvider(**kw),
+    lambda **kw: TavilyProvider("k", **kw),
+    lambda **kw: ArxivProvider(**kw),
+    lambda **kw: WikimediaProvider(**kw),
+]
+
+
+class TestConfiguredTimeout:
+    """Research providers must honour the configured timeout, not a hardcoded one.
+
+    Before TASK-014 every provider built its client with the transport default
+    (20s), silently ignoring ``LPF_TIMEOUT``.
+    """
+
+    @pytest.mark.parametrize("factory", _PROVIDER_FACTORIES)
+    def test_timeout_is_forwarded_to_the_owned_client(self, factory) -> None:
+        provider = factory(timeout_seconds=7.5)
+        assert provider._transport.client.timeout.read == 7.5
+
+    @pytest.mark.parametrize("factory", _PROVIDER_FACTORIES)
+    def test_default_timeout_is_twenty_seconds(self, factory) -> None:
+        provider = factory()
+        assert provider._transport.client.timeout.read == 20.0
+
+
+class TestProviderClientLifecycle:
+    """Providers close the client they own, and never an injected one."""
+
+    @pytest.mark.parametrize("factory", _PROVIDER_FACTORIES)
+    @pytest.mark.asyncio
+    async def test_aclose_closes_an_owned_client(self, factory) -> None:
+        provider = factory()
+        assert provider._owns_transport is True
+        await provider.aclose()
+        assert provider._transport.client.is_closed
+
+    @pytest.mark.parametrize("factory", _PROVIDER_FACTORIES)
+    @pytest.mark.asyncio
+    async def test_aclose_leaves_an_injected_transport_open(self, factory) -> None:
+        transport = _transport(_json({}))
+        provider = factory(transport=transport)
+        assert provider._owns_transport is False
+        await provider.aclose()
+        assert not transport.client.is_closed
+        await transport.client.aclose()

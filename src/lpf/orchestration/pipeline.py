@@ -26,7 +26,7 @@ from lpf.errors import LpfError
 from lpf.models.provider import ModelProvider
 from lpf.orchestration.assessment_stage import AssessmentBundle, build_assessment
 from lpf.orchestration.content_stage import ContentBundle, build_content
-from lpf.orchestration.context import RunContext
+from lpf.orchestration.context import RunContext, validate_run_id
 from lpf.orchestration.discovery_stage import (
     DiscoveryBundle,
     SpecificationBundle,
@@ -81,6 +81,23 @@ class FactoryPipeline:
         #: None means "use the deterministic offline providers".
         self._research_providers = research_providers
 
+    async def aclose(self) -> None:
+        """Release any network resources this pipeline owns.
+
+        Closes the writer model and each research provider that owns its own
+        HTTP client (injected clients are the caller's to close). Safe to call
+        after a run, including after a failed one; providers and models without
+        an ``aclose`` method are skipped, so the offline pipeline is a no-op.
+        """
+        model = self._model
+        model_aclose = getattr(model, "aclose", None)
+        if model_aclose is not None:
+            await model_aclose()
+        for provider in (self._research_providers or {}).values():
+            provider_aclose = getattr(provider, "aclose", None)
+            if provider_aclose is not None:
+                await provider_aclose()
+
     async def run(
         self,
         inputs: DiscoveryInputs,
@@ -91,6 +108,7 @@ class FactoryPipeline:
         required_gates: list[str] | None = None,
     ) -> FactoryRunResult:
         """Execute every stage, recording state and events as it goes."""
+        validate_run_id(run_id)
         ctx = RunContext(run_id=run_id, seed=seed, output_dir=self._output_dir)
         state = RunState(run_id=run_id)
         events = EventLog(run_id=run_id)

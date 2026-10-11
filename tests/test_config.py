@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from lpf.config import LpfConfig, load_config
+from lpf.errors import ConfigError
 
 
 class TestLpfConfig:
@@ -103,3 +106,29 @@ class TestLoadConfigFromToml:
         path = self._write(tmp_path, '[model]\nkind = "ollama"\nbrand_new_key = "x"\n')
         cfg = load_config(path)
         assert cfg.provider == "ollama"
+
+
+class TestTimeoutParsing:
+    """``LPF_TIMEOUT`` must never crash startup with a bare ``ValueError``."""
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("90", 90), ("1", 1), ("2.4", 2), ("2.5", 2), ("0.4", 1)],
+    )
+    def test_non_integer_values_parse(self, monkeypatch, raw: str, expected: int) -> None:
+        monkeypatch.setenv("LPF_TIMEOUT", raw)
+        assert load_config().timeout_seconds == expected
+
+    @pytest.mark.parametrize("raw", ["abc", "", "5s", "0", "-3", "nan", "inf"])
+    def test_invalid_values_raise_a_readable_config_error(self, monkeypatch, raw: str) -> None:
+        monkeypatch.setenv("LPF_TIMEOUT", raw)
+        with pytest.raises(ConfigError) as excinfo:
+            load_config()
+        assert excinfo.value.code == "INVALID_TIMEOUT"
+        assert "LPF_TIMEOUT" in str(excinfo.value)
+
+    def test_malformed_toml_timeout_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / "lpf.toml"
+        path.write_text('[run]\ntimeout = "abc"\n', encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(path)

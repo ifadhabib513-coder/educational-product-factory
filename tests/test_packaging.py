@@ -253,6 +253,23 @@ class TestRunBundle:
         second = build_run_bundle(root=tmp_path / "o2", run_id="b", members=right.items())
         assert first.read_bytes() == second.read_bytes()
 
+    def test_per_entry_metadata_is_pinned(self, tmp_path: Path) -> None:
+        """The determinism rests on asserted invariants, not a same-host rerun.
+
+        Each entry must carry the fixed DOS epoch, ``create_system`` Unix, the
+        fixed Unix mode, and deflate compression -- the fields that would
+        otherwise vary with the building host and break byte-identity.
+        """
+        files = self._make_files(tmp_path / "src")
+        bundle = build_run_bundle(root=tmp_path, run_id="b", members=files.items())
+        with zipfile.ZipFile(bundle) as archive:
+            assert len(archive.infolist()) == len(files)
+            for info in archive.infolist():
+                assert info.date_time == (1980, 1, 1, 0, 0, 0)
+                assert info.create_system == 3
+                assert info.external_attr == 0o644 << 16
+                assert info.compress_type == zipfile.ZIP_DEFLATED
+
     def test_entries_carry_a_fixed_timestamp(self, tmp_path: Path) -> None:
         files = self._make_files(tmp_path / "src")
         bundle = build_run_bundle(root=tmp_path, run_id="b", members=files.items())

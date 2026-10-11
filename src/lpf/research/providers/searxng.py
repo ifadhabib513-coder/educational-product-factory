@@ -34,15 +34,24 @@ class SearxngProvider:
         *,
         categories: str = "general,science",
         language: str = "en",
+        timeout_seconds: float = 20.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._categories = categories
         self._language = language
         self._owns_transport = transport is None
         self._transport = transport or HttpTransport(
-            client=build_client(headers={"Accept": "application/json"}),
+            client=build_client(
+                headers={"Accept": "application/json"},
+                timeout_seconds=timeout_seconds,
+            ),
             rate_limiter=RateLimiter(min_interval_seconds=0.2),
         )
+
+    async def aclose(self) -> None:
+        """Close the HTTP client, but only if this provider created it."""
+        if self._owns_transport:
+            await self._transport.aclose()
 
     async def search(self, query: str, *, max_results: int = 10) -> list[SearchResult]:
         """Query SearXNG and normalise its JSON results."""

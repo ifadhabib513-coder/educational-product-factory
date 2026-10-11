@@ -37,12 +37,22 @@ class ArxivProvider:
         transport: HttpTransport | None = None,
         *,
         max_query_chars: int = 400,
+        timeout_seconds: float = 20.0,
     ) -> None:
         self._max_query_chars = max_query_chars
+        self._owns_transport = transport is None
         self._transport = transport or HttpTransport(
-            client=build_client(headers={"Accept": "application/atom+xml"}),
+            client=build_client(
+                headers={"Accept": "application/atom+xml"},
+                timeout_seconds=timeout_seconds,
+            ),
             rate_limiter=RateLimiter(min_interval_seconds=_ARXIV_INTERVAL_SECONDS),
         )
+
+    async def aclose(self) -> None:
+        """Close the HTTP client, but only if this provider created it."""
+        if self._owns_transport:
+            await self._transport.aclose()
 
     async def search(self, query: str, *, max_results: int = 10) -> list[SearchResult]:
         """Query arXiv and normalise Atom entries into SearchResults."""

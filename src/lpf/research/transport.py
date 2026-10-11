@@ -88,6 +88,10 @@ class HttpTransport:
         """GET and parse a JSON body, retrying retryable failures."""
         return await self._request(url, params=params, parse="json")
 
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client and release its connections."""
+        await self.client.aclose()
+
     async def get_text(self, url: str, params: dict | None = None) -> str:
         """GET and return the raw body as text."""
         return str(await self._request(url, params=params, parse="text"))

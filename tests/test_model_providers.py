@@ -553,3 +553,51 @@ class TestProviderDownFailsRun:
         assert result.verification is None
         assert "PROVIDER_REQUEST_FAILED" in result.state.failure_reason
         assert "3 attempt(s)" in result.state.failure_reason
+
+
+class TestClientLifecycle:
+    """Live clients must be released, but an injected one must survive (TASK-014)."""
+
+    async def test_model_closes_an_owned_client(self) -> None:
+        model = OpenAICompatibleModel(api_key="k")
+        assert model._owns_client is True
+        await model.aclose()
+        assert model._client.is_closed
+
+    async def test_model_leaves_an_injected_client_open(self) -> None:
+        client = _client(_json200)
+        model = OpenAICompatibleModel(client=client)
+        assert model._owns_client is False
+        await model.aclose()
+        assert not client.is_closed
+        await client.aclose()
+
+    async def test_pipeline_aclose_closes_owned_model_and_ignores_mock(
+        self, tmp_path: Path
+    ) -> None:
+        model = OpenAICompatibleModel(api_key="k")
+        pipeline = FactoryPipeline(output_dir=str(tmp_path), model=model)
+        assert not model._client.is_closed
+        await pipeline.aclose()
+        assert model._client.is_closed
+
+    async def test_pipeline_aclose_is_a_noop_for_the_offline_default(self, tmp_path: Path) -> None:
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        await pipeline.aclose()
+
+    async def test_pipeline_aclose_closes_owned_research_providers(self, tmp_path: Path) -> None:
+        from lpf.research.providers.arxiv import ArxivProvider
+        from lpf.schemas.research import SearchProvider
+
+        provider = ArxivProvider()
+        pipeline = FactoryPipeline(
+            output_dir=str(tmp_path),
+            research_providers={SearchProvider.ARXIV: provider},
+        )
+        await pipeline.aclose()
+        assert provider._transport.client.is_closed
+
+    async def test_pipeline_aclose_after_a_run(self, tmp_path: Path) -> None:
+        pipeline = FactoryPipeline(output_dir=str(tmp_path))
+        await pipeline.run(_inputs(), run_id="close-after-run")
+        await pipeline.aclose()

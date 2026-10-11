@@ -33,6 +33,7 @@ class TavilyProvider:
         search_depth: str = "advanced",
         include_answer: bool = False,
         max_extracted_chars: int = 20_000,
+        timeout_seconds: float = 20.0,
     ) -> None:
         if not api_key:
             raise ValueError("TavilyProvider requires an API key")
@@ -41,10 +42,16 @@ class TavilyProvider:
         self._search_depth = search_depth
         self._include_answer = include_answer
         self._max_extracted_chars = max_extracted_chars
+        self._owns_transport = transport is None
         self._transport = transport or HttpTransport(
-            client=build_client(),
+            client=build_client(timeout_seconds=timeout_seconds),
             rate_limiter=RateLimiter(min_interval_seconds=1.0),
         )
+
+    async def aclose(self) -> None:
+        """Close the HTTP client, but only if this provider created it."""
+        if self._owns_transport:
+            await self._transport.aclose()
 
     async def search(self, query: str, *, max_results: int = 10) -> list[SearchResult]:
         """Run a Tavily search and normalise the results."""

@@ -181,3 +181,30 @@ class TestModelSelection:
         )
         assert result.exit_code == 0, result.output
         assert captured["model"] is fake
+
+
+class TestCliInputHygiene:
+    """Bad input must fail readably, and never write outside the output dir."""
+
+    @pytest.mark.parametrize("run_id", ["../outside", "..\\..\\evil", "a/b", "a\\b", "", ".hidden"])
+    def test_rejects_a_run_id_that_could_escape_the_output_dir(
+        self, tmp_path: Path, run_id: str
+    ) -> None:
+        result = CliRunner().invoke(
+            main,
+            ["generate", "Physics", "Projectile Motion", "--run-id", run_id],
+            env={"LPF_OUTPUT_DIR": str(tmp_path / "out")},
+        )
+        assert result.exit_code == 1
+        assert "Invalid run id" in result.output
+        assert not (tmp_path / "outside").exists()
+        assert not (tmp_path / "evil").exists()
+
+    def test_invalid_timeout_env_is_a_readable_error(self, tmp_path: Path) -> None:
+        result = CliRunner().invoke(
+            main,
+            ["generate", "Physics", "Projectile Motion", "--run-id", "cli-test"],
+            env={"LPF_OUTPUT_DIR": str(tmp_path), "LPF_TIMEOUT": "abc"},
+        )
+        assert result.exit_code == 1
+        assert "LPF_TIMEOUT" in result.output

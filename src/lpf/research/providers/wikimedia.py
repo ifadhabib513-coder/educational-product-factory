@@ -40,16 +40,23 @@ class WikimediaProvider:
         *,
         language: str = "en",
         limit: int = 10,
+        timeout_seconds: float = 20.0,
     ) -> None:
         self._language = language
         self._limit = limit
+        self._owns_transport = transport is None
         base = f"https://{language}.wikipedia.org/w/api.php"
         self._transport = transport or HttpTransport(
-            client=build_client(user_agent=_USER_AGENT),
+            client=build_client(user_agent=_USER_AGENT, timeout_seconds=timeout_seconds),
             rate_limiter=RateLimiter(min_interval_seconds=0.5),
         )
         self._search_url = base
         self._extract_base = f"https://{language}.wikipedia.org/api/rest_v1"
+
+    async def aclose(self) -> None:
+        """Close the HTTP client, but only if this provider created it."""
+        if self._owns_transport:
+            await self._transport.aclose()
 
     async def search(self, query: str, *, max_results: int = 10) -> list[SearchResult]:
         """Full-text search Wikipedia, returning matching article summaries."""
