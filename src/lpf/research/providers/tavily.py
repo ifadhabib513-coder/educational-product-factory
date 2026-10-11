@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from lpf.domain.identity import new_id
+from lpf.domain.identity import seeded_id
 from lpf.research.authority import classify_authority, extract_domain
 from lpf.research.transport import HttpTransport, RateLimiter, TransportError, build_client
 from lpf.schemas.research import SearchProvider, SearchResult
@@ -97,7 +97,7 @@ class TavilyProvider:
         title = str(item.get("title") or "").strip()
 
         return SearchResult(
-            source_id=new_id(),
+            source_id=seeded_id(self.provider_name, url),
             title=title or url or "Untitled",
             url=url,
             snippet=str(item.get("content") or "").strip(),

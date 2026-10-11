@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from lpf.domain.identity import new_id
+from lpf.domain.identity import seeded_id
 from lpf.research.authority import classify_authority, extract_domain
 from lpf.research.transport import (
     HttpTransport,
@@ -77,7 +77,7 @@ class SearxngProvider:
         snippet = str(item.get("content") or item.get("snippet") or "").strip()
 
         return SearchResult(
-            source_id=new_id(),
+            source_id=seeded_id(self.provider_name, url),
             title=title or url or "Untitled",
             url=url,
             snippet=snippet,

@@ -21,6 +21,19 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Final
 
+from lpf.orchestration.gates import (
+    ANSWER_KEY_REFERENCES,
+    ANSWER_REFERENCES,
+    ASSESSMENT_REFERENCES,
+    CURRICULUM_COVERAGE,
+    FACTUAL_CONSISTENCY,
+    MISCONCEPTION_REFERENCES,
+    NUMERICAL_CONSISTENCY,
+    OBJECTIVE_REFERENCES,
+    QUESTION_REFERENCES,
+    REQUIRED_GATES_PRESENT,
+    RESEARCH_EVIDENCE,
+)
 from lpf.orchestration.state import RunStage
 
 __all__ = [
@@ -38,8 +51,8 @@ __all__ = [
 #: re-run can never clear it — it belongs in :data:`NON_REPAIRABLE_GATES`.
 CONTENT_GATES: Final[frozenset[str]] = frozenset(
     {
-        "misconception_references",
-        "numerical_consistency",
+        MISCONCEPTION_REFERENCES,
+        NUMERICAL_CONSISTENCY,
     }
 )
 
@@ -47,10 +60,10 @@ CONTENT_GATES: Final[frozenset[str]] = frozenset(
 #: ``answers``, ``answer_key``, ``assessment``).
 ASSESSMENT_GATES: Final[frozenset[str]] = frozenset(
     {
-        "question_references",
-        "assessment_references",
-        "answer_references",
-        "answer_key_references",
+        QUESTION_REFERENCES,
+        ASSESSMENT_REFERENCES,
+        ANSWER_REFERENCES,
+        ANSWER_KEY_REFERENCES,
     }
 )
 
@@ -58,16 +71,15 @@ ASSESSMENT_GATES: Final[frozenset[str]] = frozenset(
 #: come from stages the revision cycle does not revisit (discovery, research,
 #: syllabus) or from run configuration itself. ``factual_consistency`` sits here
 #: because its evidence lives in research, which the revision cycle never
-#: revisits; ``schema_validity`` is absent because schema conformance is enforced
-#: by pydantic at construction and no gate exists to route. Every one of these is
-#: unowned, and any gate outside the two owned sets is unowned too.
+#: revisits. Every one of these is unowned, and any gate outside the two owned
+#: sets is unowned too.
 NON_REPAIRABLE_GATES: Final[frozenset[str]] = frozenset(
     {
-        "curriculum_coverage",
-        "objective_references",
-        "research_evidence",
-        "factual_consistency",
-        "required_gates_present",
+        CURRICULUM_COVERAGE,
+        OBJECTIVE_REFERENCES,
+        RESEARCH_EVIDENCE,
+        FACTUAL_CONSISTENCY,
+        REQUIRED_GATES_PRESENT,
     }
 )
 

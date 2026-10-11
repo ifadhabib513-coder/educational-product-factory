@@ -2,8 +2,8 @@
 
 Every gate delegates to an existing ``check_*`` validator or an explicit coverage
 assertion, so QA cannot pass by re-testing what construction already guaranteed.
-The one thing construction *does* guarantee — schema validity — is still declared
-as a gate, because silently omitting it would make the gate set misleading.
+Gate names are the :mod:`lpf.orchestration.gates` catalog constants, the single
+source of truth the revision router keys on.
 """
 
 from __future__ import annotations
@@ -35,6 +35,19 @@ from lpf.domain.validation import (
 from lpf.domain.worked_example import WorkedExample
 from lpf.errors import ValidationError
 from lpf.orchestration.context import RunContext
+from lpf.orchestration.gates import (
+    ANSWER_KEY_REFERENCES,
+    ANSWER_REFERENCES,
+    ASSESSMENT_REFERENCES,
+    CURRICULUM_COVERAGE,
+    FACTUAL_CONSISTENCY,
+    MISCONCEPTION_REFERENCES,
+    NUMERICAL_CONSISTENCY,
+    OBJECTIVE_REFERENCES,
+    QUESTION_REFERENCES,
+    REQUIRED_GATES_PRESENT,
+    RESEARCH_EVIDENCE,
+)
 from lpf.orchestration.state import MAX_REVISIONS
 from lpf.result import Result, is_ok
 from lpf.schemas.research import EvidenceMap
@@ -104,7 +117,7 @@ def _coverage_gate(
                 id=ctx.id("gate"),
                 created_at=ctx.now(),
                 checked_at=ctx.now(),
-                gate_name="curriculum_coverage",
+                gate_name=CURRICULUM_COVERAGE,
                 status=GateStatus.PASSED,
                 score=1.0,
             )
@@ -114,7 +127,7 @@ def _coverage_gate(
             id=ctx.id("gate"),
             created_at=ctx.now(),
             checked_at=ctx.now(),
-            gate_name="curriculum_coverage",
+            gate_name=CURRICULUM_COVERAGE,
             status=GateStatus.FAILED,
             score=0.0,
             findings=[
@@ -157,7 +170,7 @@ def _evidence_gate(ctx: RunContext, evidence_map: EvidenceMap) -> QualityGate:
             id=ctx.id("gate"),
             created_at=ctx.now(),
             checked_at=ctx.now(),
-            gate_name="research_evidence",
+            gate_name=RESEARCH_EVIDENCE,
             status=status,
             score=float(supported),
             findings=findings,
@@ -205,42 +218,42 @@ def build_qa(
         _coverage_gate(ctx, objectives=objectives, blueprint=blueprint),
         _gate_from_result(
             ctx,
-            name="objective_references",
+            name=OBJECTIVE_REFERENCES,
             result=check_objective_references(blueprint, objective_ids),
             location="curriculum_blueprint",
             suggested_fix="Reference only existing objective ids.",
         ),
         _gate_from_result(
             ctx,
-            name="misconception_references",
+            name=MISCONCEPTION_REFERENCES,
             result=check_misconception_objective_refs(misconceptions, objective_ids),
             location="misconceptions",
             suggested_fix="Reference only existing objective ids.",
         ),
         _gate_from_result(
             ctx,
-            name="question_references",
+            name=QUESTION_REFERENCES,
             result=check_question_references(questions, lesson_ids, objective_ids),
             location="practice_questions",
             suggested_fix="Reference only existing lesson and objective ids.",
         ),
         _gate_from_result(
             ctx,
-            name="assessment_references",
+            name=ASSESSMENT_REFERENCES,
             result=check_assessment_references(assessment, question_ids),
             location="assessment",
             suggested_fix="Reference only existing question ids.",
         ),
         _gate_from_result(
             ctx,
-            name="answer_references",
+            name=ANSWER_REFERENCES,
             result=check_answer_references(answers, question_ids),
             location="answers",
             suggested_fix="Reference only existing question ids.",
         ),
         _gate_from_result(
             ctx,
-            name="answer_key_references",
+            name=ANSWER_KEY_REFERENCES,
             result=check_answer_key_references(answer_key, question_ids),
             location="answer_key",
             suggested_fix="Every answer in the key must reference an existing question.",
@@ -248,7 +261,7 @@ def build_qa(
         _evidence_gate(ctx, evidence_map),
         _gate_from_result(
             ctx,
-            name="factual_consistency",
+            name=FACTUAL_CONSISTENCY,
             result=check_factual_consistency(lessons, evidence_map, verified_source_ids),
             location="evidence_map",
             suggested_fix=(
@@ -258,7 +271,7 @@ def build_qa(
         ),
         _gate_from_result(
             ctx,
-            name="numerical_consistency",
+            name=NUMERICAL_CONSISTENCY,
             result=check_worked_example_arithmetic(list(worked_examples or [])),
             location="worked_examples",
             suggested_fix=(
@@ -277,7 +290,7 @@ def build_qa(
                     id=ctx.id("gate"),
                     created_at=ctx.now(),
                     checked_at=ctx.now(),
-                    gate_name="required_gates_present",
+                    gate_name=REQUIRED_GATES_PRESENT,
                     status=GateStatus.PASSED if not missing else GateStatus.FAILED,
                     score=1.0 if not missing else 0.0,
                     findings=[]

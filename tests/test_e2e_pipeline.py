@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
+from lpf.domain.identity import seeded_id
 from lpf.orchestration.pipeline import FactoryPipeline, FactoryRunResult
 from lpf.orchestration.state import PIPELINE_STAGES
 from lpf.schemas.discovery import DiscoveryInputs
+from lpf.schemas.research import SearchProvider, SearchResult, SourceAuthority
 
 
 def _inputs() -> DiscoveryInputs:
@@ -132,6 +135,75 @@ class TestDeterminism:
         assert claim_ids
         assert all(claim_id.startswith("scoped-claim-") for claim_id in claim_ids)
         assert len(claim_ids) == len(set(claim_ids))
+
+    async def test_staged_live_runs_are_byte_identical_given_identical_responses(
+        self, tmp_path: Path
+    ) -> None:
+        """TASK-013: identical live responses must yield identical research output.
+
+        Two live runs given the same provider responses (deterministic source
+        ids, same content) must produce the same report and evidence-map content
+        hashes. The stage normalises ids and timestamps (ADR-008); the remaining
+        hidden uuid was SearchResult.source_id, now a seeded function of
+        (provider, url) in every shipped provider.
+
+        NOTE: installed via `pip install -e .` so the check only wraps the stage
+        boundary — this is the level at which the reproducibility promise lives.
+        """
+        from lpf.orchestration.context import RunContext
+        from lpf.orchestration.research_stage import build_research
+
+        class CannedLiveProvider:
+            """Search results are a fixed function of the query — like the real
+            adapters, deterministically source-id'd, no uuid in sight."""
+
+            provider_name = SearchProvider.WIKIMEDIA
+
+            async def search(self, query: str, *, max_results: int = 10):
+                return [
+                    SearchResult(
+                        source_id=seeded_id(self.provider_name, url),
+                        title=f"Title {rank}",
+                        url=url,
+                        snippet="The topic is covered in clear terms.",
+                        domain="en.wikipedia.org",
+                        provider=self.provider_name,
+                        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+                        authority=SourceAuthority.SECONDARY,
+                    )
+                    for rank, url in enumerate(
+                        [
+                            "https://en.wikipedia.org/wiki/Algebra",
+                            "https://en.wikipedia.org/wiki/Linear_algebra",
+                        ],
+                        start=1,
+                    )
+                ]
+
+            async def extract(self, url: str) -> str:
+                return f"Extracted content for {url}."
+
+        async def research() -> tuple:
+            ctx = RunContext(run_id="live-determinism", seed="fixed")
+            bundle = await build_research(
+                ctx,
+                product_spec_id="spec-1",
+                research_questions=[
+                    "What is algebra?",
+                    "How is algebra taught?",
+                ],
+                topic="algebra",
+                providers={SearchProvider.WIKIMEDIA: CannedLiveProvider()},
+            )
+            return bundle
+
+        first = await research()
+        second = await research()
+
+        assert [r.source_id for r in first.results] == [r.source_id for r in second.results]
+        assert all(r.source_id == seeded_id(r.provider, r.url) for r in first.results)
+        assert first.report.content_hash == second.report.content_hash
+        assert first.evidence_map.content_hash == second.evidence_map.content_hash
 
 
 class TestMockResearchNoise:

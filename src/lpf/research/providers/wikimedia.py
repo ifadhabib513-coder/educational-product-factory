@@ -12,7 +12,7 @@ import os
 from typing import Any
 from urllib.parse import quote, unquote, urlparse
 
-from lpf.domain.identity import new_id
+from lpf.domain.identity import seeded_id
 from lpf.research.authority import classify_authority
 from lpf.research.transport import HttpTransport, RateLimiter, TransportError, build_client
 from lpf.schemas.research import SearchProvider, SearchResult
@@ -96,7 +96,7 @@ class WikimediaProvider:
         snippet = str(hit.get("snippet") or "")
 
         return SearchResult(
-            source_id=new_id(),
+            source_id=seeded_id(self.provider_name, page_url),
             title=title or "Untitled",
             url=page_url,
             snippet=_strip_html(snippet),

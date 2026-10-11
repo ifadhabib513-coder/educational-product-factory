@@ -6,7 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from lpf.domain.curriculum import CurriculumBlueprint, CurriculumUnit
-from lpf.domain.identity import compute_content_hash, new_id, with_content_hash
+from lpf.domain.identity import (
+    compute_content_hash,
+    new_id,
+    seeded_id,
+    with_content_hash,
+)
 from lpf.domain.learner import LearnerProfile
 from lpf.domain.objectives import BloomLevel, LearningObjective, Prerequisite
 from lpf.domain.product import ProductDefinition
@@ -147,6 +152,34 @@ class TestNewId:
         id_val = new_id()
         assert len(id_val) == 32
         int(id_val, 16)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Tests: seeded_id (TASK-013 reproducibility)
+# ---------------------------------------------------------------------------
+
+
+class TestSeededId:
+    def test_same_parts_always_yield_the_same_id(self) -> None:
+        assert seeded_id("arxiv", "https://arxiv.org/abs/2401.00001") == seeded_id(
+            "arxiv", "https://arxiv.org/abs/2401.00001"
+        )
+
+    def test_order_of_parts_matters(self) -> None:
+        assert seeded_id("arxiv", "url") != seeded_id("url", "arxiv")
+
+    def test_collision_resistance_across_providers_and_urls(self) -> None:
+        pairs = [
+            ("arxiv", "https://a.example/1"),
+            ("arxiv", "https://a.example/2"),
+            ("wikimedia", "https://a.example/1"),
+            ("searxng", "https://a.example/1"),
+        ]
+        ids = [seeded_id(*pair) for pair in pairs]
+        assert len(set(ids)) == len(ids)
+        assert all(len(i) == 32 for i in ids)
+        for i in ids:
+            int(i, 16)  # should not raise
 
 
 # ---------------------------------------------------------------------------

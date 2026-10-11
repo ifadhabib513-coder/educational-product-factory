@@ -16,8 +16,10 @@ import pytest
 
 from lpf.domain.identity import with_content_hash
 from lpf.domain.quality import GateStatus
+from lpf.orchestration import gates as gate_catalog
 from lpf.orchestration import pipeline as pipeline_module
 from lpf.orchestration.content_stage import ContentBundle
+from lpf.orchestration.gates import REQUIRED_GATES_PRESENT
 from lpf.orchestration.pipeline import FactoryPipeline, FactoryRunResult
 from lpf.orchestration.qa_stage import QaBundle
 from lpf.orchestration.revision import (
@@ -303,6 +305,44 @@ class TestRoutingTable:
         assert not CONTENT_GATES & ASSESSMENT_GATES
         assert not CONTENT_GATES & NON_REPAIRABLE_GATES
         assert not ASSESSMENT_GATES & NON_REPAIRABLE_GATES
+
+    def test_the_gate_catalog_matches_the_ownership_sets_exactly(self) -> None:
+        owned = CONTENT_GATES | ASSESSMENT_GATES | NON_REPAIRABLE_GATES
+        assert set(gate_catalog.ALL_GATES) == owned
+
+    def test_every_catalog_gate_lives_in_exactly_one_ownership_set(self) -> None:
+        for name in gate_catalog.ALL_GATES:
+            membership = [
+                name in CONTENT_GATES,
+                name in ASSESSMENT_GATES,
+                name in NON_REPAIRABLE_GATES,
+            ]
+            assert sum(membership) == 1, name
+
+
+class TestGateCatalogSurface:
+    """The QA stage emits exactly the gate catalog (TASK-013)."""
+
+    async def test_a_default_run_emits_every_unconditional_catalog_gate(
+        self, tmp_path: Path
+    ) -> None:
+        result = await FactoryPipeline(output_dir=str(tmp_path)).run(_inputs(), run_id="gates")
+        assert result.verification is not None
+        emitted = {gate.gate_name for gate in result.verification.gates}
+        unconditional = (CONTENT_GATES | ASSESSMENT_GATES | NON_REPAIRABLE_GATES) - {
+            REQUIRED_GATES_PRESENT
+        }
+        assert emitted == unconditional
+        assert emitted.issubset(set(gate_catalog.ALL_GATES))
+
+    async def test_a_required_gates_run_emits_every_catalog_gate(self, tmp_path: Path) -> None:
+        result = await FactoryPipeline(output_dir=str(tmp_path)).run(
+            _inputs(), run_id="gates", required_gates=["objective_references"]
+        )
+        assert result.verification is not None
+        emitted = {gate.gate_name for gate in result.verification.gates}
+        assert REQUIRED_GATES_PRESENT in emitted
+        assert emitted == set(gate_catalog.ALL_GATES)
 
 
 class TestReproducibility:

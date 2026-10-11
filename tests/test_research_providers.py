@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from lpf.domain.identity import seeded_id
 from lpf.research.providers.arxiv import ArxivProvider
 from lpf.research.providers.searxng import SearxngProvider
 from lpf.research.providers.tavily import TavilyProvider
@@ -555,6 +556,31 @@ class TestProviderContract:
         provider = WikimediaProvider(transport=_transport(_json(WIKIMEDIA_PAYLOAD)))
         results = await provider.search("algebra")
         assert len({r.source_id for r in results}) == len(results)
+
+    @pytest.mark.parametrize(
+        "provider_factory",
+        [
+            lambda: SearxngProvider(transport=_transport(_json(SEARXNG_PAYLOAD))),
+            lambda: TavilyProvider("k", transport=_transport(_json(TAVILY_PAYLOAD))),
+            lambda: ArxivProvider(transport=_transport(_raw(ARXIV_FEED))),
+            lambda: WikimediaProvider(transport=_transport(_json(WIKIMEDIA_PAYLOAD))),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_source_ids_are_deterministic_given_identical_responses(
+        self, provider_factory
+    ) -> None:
+        """Same canned live response twice -> identical source ids (TASK-013).
+
+        Two live runs are reproducible only if the provider response itself is
+        deterministic; a uuid source id (old behaviour) made the report and
+        evidence-map content hashes differ run to run even when the responses
+        were identical. Source ids must be a pure function of (provider, url).
+        """
+        first = await provider_factory().search("algebra")
+        second = await provider_factory().search("algebra")
+        assert [r.source_id for r in first] == [r.source_id for r in second]
+        assert all(r.source_id == seeded_id(r.provider, r.url) for r in first)
 
     @pytest.mark.asyncio
     async def test_retrieved_at_is_set(self) -> None:

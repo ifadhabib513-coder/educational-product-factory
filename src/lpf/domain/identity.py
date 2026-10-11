@@ -17,6 +17,19 @@ def new_id() -> str:
     return uuid.uuid4().hex
 
 
+def seeded_id(*parts: str) -> str:
+    """Deterministic 32-hex id derived from the given string parts.
+
+    The same parts always yield the same id (``sha256(parts)`` truncated to
+    32 hex chars), so identically-shaped live provider responses produce
+    byte-identical runs. Reserve this for ids that are a pure function of the
+    source content — e.g. ``seeded_id(provider, url)`` — and keep
+    :func:`new_id` for genuinely unique instances.
+    """
+    joined = "|".join(parts)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:32]
+
+
 def compute_content_hash(model: BaseModel) -> str:
     """Compute SHA-256 content hash over canonical JSON of the model.
 

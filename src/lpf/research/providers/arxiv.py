@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 from xml.etree import ElementTree as ET
 
-from lpf.domain.identity import new_id
+from lpf.domain.identity import seeded_id
 from lpf.research.authority import classify_authority
 from lpf.research.transport import HttpTransport, RateLimiter, TransportError, build_client
 from lpf.schemas.research import SearchProvider, SearchResult, SourceAuthority
@@ -92,7 +92,7 @@ def _entry_to_result(entry: ET.Element) -> SearchResult:
     published = _text(entry, "published")
 
     return SearchResult(
-        source_id=new_id(),
+        source_id=seeded_id(SearchProvider.ARXIV, url),
         title=_collapse(title) or url or "Untitled arXiv entry",
         url=url,
         snippet=_collapse(summary),
