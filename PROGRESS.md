@@ -21,6 +21,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 14 | 2026-10-11 | TASK-014 | CLI/Config Hygiene (tolerant `LPF_TIMEOUT` parse, `run_id` traversal guard, HTTP client lifecycle via `aclose()`, configured research timeout, honest bundle claim) | Completed | `e34bb6c`, `ee4dcb2` |
 | 15 | 2026-10-11 | TASK-015 | Contract Honesty (enforce `minimum_score`/`required_gates`/`evidence_required`, remove dead `seed`, fix `date_span` to POSIX floats, document `overall_status` rollup) | Completed | `e7cf2b4`, `5ebcead` |
 | 16 | 2026-10-11 | TASK-016 | Dead-Code Removal + Coverage Gate (trim `research/service.py`, delete unwired `discovery/validation.py` + scaffolding packages + dead exports, add `--cov-fail-under=97`) | Completed | `8ae03e1`, `1533f34` |
+| 17 | 2026-10-11 | TASK-017 | Milestone Close (ROADMAP/version_history alignment, v0.8.1 audit plan complete, open v0.9.0 — Real Prose End to End) | Completed | `a522db4` |
 
 > **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
 > seam: `lpf generate --model openai-compatible|ollama` selects the writer
