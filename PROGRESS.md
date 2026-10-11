@@ -16,7 +16,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 9 | 2026-10-11 | TASK-009 | Revision Loop Repairs a Model-Written Worked-Example Defect (model-written worked examples, QA feedback threaded into rebuilds) | Completed | `56aac58` |
 | 10 | 2026-10-11 | TASK-010 | Route Retrieval by Query Intent (per-question provider pruning keyed on intent) | Completed | `34e38d1` |
 | 11 | 2026-10-11 | TASK-011 | Expose Model Provider Selection in CLI and Config (`--model`, env, `lpf.toml`) | Completed | `419c3c4` |
-| 12 | 2026-10-11 | TASK-012 | Fix the Five Verified P0 Bugs from the Whole-Codebase Audit (provider kind mismatch, research-owned gate routing, terminal-state crash, ValueError escapes, decorative schema gate) | Completed | `(pending)` |
+| 12 | 2026-10-11 | TASK-012 | Fix the Five Verified P0 Bugs from the Whole-Codebase Audit (provider kind mismatch, research-owned gate routing, terminal-state crash, ValueError escapes, decorative schema gate) | Completed | `67c9b1b`, `6a74519` |
 
 > **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
 > seam: `lpf generate --model openai-compatible|ollama` selects the writer
