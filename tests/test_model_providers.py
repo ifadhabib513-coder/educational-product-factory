@@ -393,20 +393,45 @@ class TestAdapterContract:
 
 
 def _prose_handler(request: httpx.Request) -> httpx.Response:
-    """Deterministic, claim-free prose in the shape a content call needs."""
+    """Deterministic, claim-free prose / canonical worked-example draft.
+
+    Text calls (lesson bodies) get prose; structured calls (worked examples,
+    TASK-009) get the canonical, numerically-clean ``WorkedExampleDraft`` so the
+    run passes QA and the package is reproducible.
+    """
     body = json.loads(request.content)
+    structured = bool(body.get("response_format") or body.get("format"))
     user = next(
         message["content"]
         for message in reversed(body["messages"])
         if message.get("role") == "user"
     )
-    title = user.replace("Explain ", "").split(" for a")[0]
-    content = (
-        f"{title} is defined by a clear rule that links the idea to its use. "
-        "The key idea is introduced in plain language and applied in one example. "
-        "The common mistake is treating the rule as a formula to memorise."
-    )
-    return httpx.Response(200, json=_openai_payload(content))
+    if not structured:
+        title = user.replace("Explain ", "").split(" for a")[0]
+        content = (
+            f"{title} is defined by a clear rule that links the idea to its use. "
+            "The key idea is introduced in plain language and applied in one example. "
+            "The common mistake is treating the rule as a formula to memorise."
+        )
+        return httpx.Response(200, json=_openai_payload(content))
+
+    start, end = user.find('"'), user.rfind('"')
+    title = user[start + 1 : end] if start != -1 and end > start else "the topic"
+    draft = {
+        "problem_statement": f"Apply what you just learned: {title}.",
+        "solution_steps": [
+            {"order": 1, "statement": "Identify what is being asked."},
+            {"order": 2, "statement": "Choose the method that fits."},
+            {
+                "order": 3,
+                "statement": "Carry it out and check the result.",
+                "expression": "result = apply(method, problem)",
+            },
+        ],
+        "final_answer": "The problem is solved and the result checked.",
+        "common_errors": ["Skips the check step."],
+    }
+    return httpx.Response(200, json=_openai_payload(json.dumps(draft)))
 
 
 def _inputs() -> DiscoveryInputs:

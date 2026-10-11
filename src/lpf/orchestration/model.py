@@ -16,6 +16,9 @@ import hashlib
 
 from pydantic import BaseModel
 
+from lpf.domain.content import SolutionStep
+from lpf.domain.worked_example import WorkedExampleDraft
+
 
 def _digest(text: str) -> str:
     """Short stable digest, used only to vary canned phrasing deterministically."""
@@ -45,15 +48,50 @@ class DeterministicMockModel:
         """
         prompt = self._last_user_message(messages)
         if schema is not None:
-            raise ValueError(
-                "DeterministicMockModel returns text only; call without a schema and "
-                "construct the artifact in the stage, or register a structured factory."
-            )
+            return self._structured(prompt, schema)
         return self._compose(prompt)
 
     async def count_tokens(self, text: str) -> int:
         """Whitespace token estimate, matching ``MockProvider``."""
         return len(text.split())
+
+    def _structured(self, prompt: str, schema: type[BaseModel]) -> BaseModel:
+        """Deterministic structured reply for the schemas the stages ask for.
+
+        The offline pipeline keeps producing the byte-identical worked examples
+        it produced before the Content stage asked the model for them: the mock
+        returns exactly the canonical template, so a structured call is a no-op
+        with respect to the package. Any other schema is refused loudly rather
+        than hallucinated.
+        """
+        if schema is WorkedExampleDraft:
+            return WorkedExampleDraft(
+                problem_statement=f"Apply what you just learned: {self._title(prompt)}.",
+                solution_steps=[
+                    SolutionStep(order=1, statement="Identify what is being asked."),
+                    SolutionStep(order=2, statement="Choose the method that fits."),
+                    SolutionStep(
+                        order=3,
+                        statement="Carry it out and check the result.",
+                        expression="result = apply(method, problem)",
+                    ),
+                ],
+                final_answer="The problem is solved and the result checked.",
+                common_errors=["Skips the check step."],
+            )
+        raise ValueError(
+            f"DeterministicMockModel cannot produce '{schema.__name__}'; "
+            "register a deterministic reply for it or use a live provider."
+        )
+
+    @staticmethod
+    def _title(prompt: str) -> str:
+        """Recover the quoted title from the worked-example prompt."""
+        start = prompt.find('"')
+        end = prompt.rfind('"')
+        if start != -1 and end > start:
+            return prompt[start + 1 : end]
+        return prompt.strip().splitlines()[0][:200]
 
     @staticmethod
     def _last_user_message(messages: list[dict[str, str]]) -> str:

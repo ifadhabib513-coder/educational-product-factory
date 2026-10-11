@@ -153,6 +153,7 @@ class FactoryPipeline:
             # around, so the shipped product never contains a lesson that was
             # thrown away on a later pass.
             rebuild_content = True
+            feedback: str | None = None
             content: ContentBundle | None = None
             assessment: AssessmentBundle | None = None
             content_artifacts: list[BaseModel] = []
@@ -169,6 +170,7 @@ class FactoryPipeline:
                         objectives_by_id={obj.id: obj for obj in discovery.outcomes.outcomes},
                         level=level,
                         model=self._model,
+                        feedback=feedback,
                     )
                     content_artifacts = [
                         *content.lessons,
@@ -242,6 +244,7 @@ class FactoryPipeline:
                     )
                 else:
                     state.begin_revision()
+                    feedback = _revision_feedback(verification)
                     rebuild_content = target is RunStage.CONTENT
                     events.emit(
                         EventType.REVISION_STARTED,
@@ -370,3 +373,19 @@ def _discard(artifacts: list[BaseModel], superseded: list[BaseModel]) -> None:
         return
     stale = {id(artifact) for artifact in superseded}
     artifacts[:] = [artifact for artifact in artifacts if id(artifact) not in stale]
+
+
+def _revision_feedback(verification: VerificationResult) -> str:
+    """Collapse a failed verification into the message the writer must repair.
+
+    Deterministic, because it is derived from the verification's own gate output
+    and is embedded in the rebuild prompt: the same failure always yields the
+    same repair instruction.
+    """
+    parts: list[str] = []
+    for gate in verification.gates:
+        if gate.status is not GateStatus.FAILED:
+            continue
+        problem = gate.findings[0].problem if gate.findings else "gate failed"
+        parts.append(f"{gate.gate_name}: {problem}")
+    return "; ".join(parts)
