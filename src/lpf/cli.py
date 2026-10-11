@@ -38,7 +38,6 @@ def main(ctx: click.Context) -> None:
 @click.argument("topic")
 @click.option("--level", default="high-school", help="Learner level")
 @click.option("--run-id", default="run", show_default=True, help="Run identifier")
-@click.option("--seed", default="default", show_default=True, help="Determinism seed")
 @click.option(
     "--model",
     "model_kind",
@@ -62,7 +61,6 @@ def generate(
     topic: str,
     level: str,
     run_id: str,
-    seed: str,
     model_kind: str | None,
     live_research: bool,
 ) -> None:
@@ -119,7 +117,7 @@ def generate(
         research_providers=research_providers,
     )
     try:
-        result = asyncio.run(pipeline.run(inputs, run_id=run_id, seed=seed))
+        result = asyncio.run(pipeline.run(inputs, run_id=run_id))
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     finally:

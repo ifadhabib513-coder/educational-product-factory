@@ -248,7 +248,7 @@ def build_specification(
                 bloom_target=BloomLevel.APPLY,
             ),
             constraints=ConstraintsSpec(evidence_required=True, citation_required=True),
-            quality=QualitySpec(minimum_score=0.8, required_gates=["schema_validity"]),
+            quality=QualitySpec(minimum_score=0.8, required_gates=[]),
             problem_statement=discovery.problem.statement,
             learner_profile_id=discovery.learner.id,
             source_refs=[discovery.brief.id, discovery.outcomes.id],

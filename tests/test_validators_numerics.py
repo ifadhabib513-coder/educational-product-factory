@@ -212,7 +212,7 @@ class TestFlawedExamplesCaught:
 class TestQaGateWiring:
     async def test_gate_is_present_in_a_passing_run(self, tmp_path: Path) -> None:
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="num-pass", seed="s")
+        result = await pipeline.run(_inputs(), run_id="num-pass")
         assert result.succeeded
         gates = {gate.gate_name: gate for gate in result.verification.gates}  # type: ignore[union-attr]
         assert "numerical_consistency" in gates
@@ -223,7 +223,6 @@ class TestQaGateWiring:
         result = await pipeline.run(
             _inputs(),
             run_id="num-req",
-            seed="s",
             required_gates=["numerical_consistency"],
         )
         assert result.succeeded
@@ -246,7 +245,7 @@ class TestQaGateWiring:
         monkeypatch.setattr(qa_module, "check_worked_example_arithmetic", spy)
 
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="num-spy", seed="s")
+        result = await pipeline.run(_inputs(), run_id="num-spy")
         assert result.succeeded
 
         expected = [
@@ -270,7 +269,7 @@ class TestQaGateWiring:
         monkeypatch.setattr(pipeline_module, "build_content", with_bad_arithmetic)
 
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="num-fail", seed="s")
+        result = await pipeline.run(_inputs(), run_id="num-fail")
 
         assert not result.succeeded
         assert result.package is None

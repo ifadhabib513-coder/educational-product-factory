@@ -7,6 +7,8 @@ easier to read.
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from lpf.errors import WorkflowError
@@ -49,6 +51,10 @@ class TestRunContext:
         right = RunContext(run_id="same")
         assert left.id("x") == right.id("x")
         assert left.now() == right.now()
+
+    def test_the_dead_seed_field_is_gone(self) -> None:
+        """``seed`` never influenced anything; removing it beats faking it."""
+        assert "seed" not in {f.name for f in dataclasses.fields(RunContext)}
 
 
 class TestRunState:

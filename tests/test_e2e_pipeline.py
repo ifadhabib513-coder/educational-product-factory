@@ -27,9 +27,9 @@ def _inputs() -> DiscoveryInputs:
     )
 
 
-async def _run(output_dir: Path, *, run_id: str = "run", seed: str = "default") -> FactoryRunResult:
+async def _run(output_dir: Path, *, run_id: str = "run") -> FactoryRunResult:
     pipeline = FactoryPipeline(output_dir=str(output_dir))
-    return await pipeline.run(_inputs(), run_id=run_id, seed=seed)
+    return await pipeline.run(_inputs(), run_id=run_id)
 
 
 def _tree_bytes(root: Path) -> dict[str, bytes]:
@@ -184,7 +184,7 @@ class TestDeterminism:
                 return f"Extracted content for {url}."
 
         async def research() -> tuple:
-            ctx = RunContext(run_id="live-determinism", seed="fixed")
+            ctx = RunContext(run_id="live-determinism")
             bundle = await build_research(
                 ctx,
                 product_spec_id="spec-1",

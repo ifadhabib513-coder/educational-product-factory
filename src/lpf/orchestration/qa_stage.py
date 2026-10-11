@@ -41,6 +41,7 @@ from lpf.orchestration.gates import (
     ASSESSMENT_REFERENCES,
     CURRICULUM_COVERAGE,
     FACTUAL_CONSISTENCY,
+    MINIMUM_SCORE,
     MISCONCEPTION_REFERENCES,
     NUMERICAL_CONSISTENCY,
     OBJECTIVE_REFERENCES,
@@ -143,23 +144,32 @@ def _coverage_gate(
     )
 
 
-def _evidence_gate(ctx: RunContext, evidence_map: EvidenceMap) -> QualityGate:
-    """At least one claim must clear the confidence threshold.
+def _evidence_gate(ctx: RunContext, evidence_map: EvidenceMap, *, required: bool) -> QualityGate:
+    """Check whether any claim cleared the confidence threshold.
 
-    A run that produces no supported claims is not a hard failure for a mock
-    product, but it is a warning worth surfacing: it means the product's content
-    is not backed by any evidence.
+    ``required`` comes from ``ProductSpec.constraints.evidence_required``: when a
+    product declares that evidence is required, a run with no supported claims
+    *fails* (the product would be ungrounded); otherwise it is a warning worth
+    surfacing. Either way a zero-evidence run is never silently passed.
     """
     supported = evidence_map.supported_claims
-    status = GateStatus.PASSED if supported > 0 else GateStatus.WARNING
+    if supported > 0:
+        status = GateStatus.PASSED
+    elif required:
+        status = GateStatus.FAILED
+    else:
+        status = GateStatus.WARNING
     findings = (
         []
         if supported > 0
         else [
             Finding(
-                severity=Severity.MAJOR,
+                severity=Severity.MAJOR if not required else Severity.CRITICAL,
                 location="evidence_map",
-                problem="No claim met the confidence threshold.",
+                problem=(
+                    "No claim met the confidence threshold."
+                    + (" Evidence is required by the product spec." if required else "")
+                ),
                 evidence=f"supported_claims={supported} of {evidence_map.total_claims}",
                 suggested_fix="Retrieve higher-authority sources for this topic.",
             )
@@ -178,8 +188,57 @@ def _evidence_gate(ctx: RunContext, evidence_map: EvidenceMap) -> QualityGate:
     )
 
 
+def _minimum_score_gate(
+    ctx: RunContext, *, gates: list[QualityGate], minimum_score: float
+) -> QualityGate:
+    """Fail when the share of passed gates is below the spec's floor.
+
+    The score is the fraction of the gates built so far that passed; this gate is
+    added after them so it is not counted in its own ratio. It makes
+    ``QualitySpec.minimum_score`` an enforced requirement rather than a dead knob.
+    """
+    passed = sum(1 for gate in gates if gate.status is GateStatus.PASSED)
+    score = passed / len(gates) if gates else 0.0
+    if score >= minimum_score:
+        return with_content_hash(
+            QualityGate(
+                id=ctx.id("gate"),
+                created_at=ctx.now(),
+                checked_at=ctx.now(),
+                gate_name=MINIMUM_SCORE,
+                status=GateStatus.PASSED,
+                score=score,
+            )
+        )
+    return with_content_hash(
+        QualityGate(
+            id=ctx.id("gate"),
+            created_at=ctx.now(),
+            checked_at=ctx.now(),
+            gate_name=MINIMUM_SCORE,
+            status=GateStatus.FAILED,
+            score=score,
+            findings=[
+                Finding(
+                    severity=Severity.CRITICAL,
+                    location="verification_result",
+                    problem="Too few quality gates passed for this product.",
+                    evidence=f"passed {passed} of {len(gates)} ({score:.2f} < {minimum_score})",
+                    suggested_fix="Fix the failing gates or lower minimum_score.",
+                )
+            ],
+        )
+    )
+
+
 def _overall_status(gates: tuple[QualityGate, ...]) -> GateStatus:
-    """Failed if any gate failed, warning if any warned, else passed."""
+    """Failed if any gate failed, warning if any warned, else passed.
+
+    Only ``FAILED`` and ``WARNING`` roll up. ``SKIPPED`` and ``NOT_APPLICABLE``
+    are treated as non-failing: a gate that does not apply to a run must not sink
+    it. (The QA stage does not currently emit either, but the rollup decision is
+    fixed here so a future gate can use them safely.)
+    """
     statuses = {gate.status for gate in gates}
     if GateStatus.FAILED in statuses:
         return GateStatus.FAILED
@@ -203,12 +262,17 @@ def build_qa(
     worked_examples: list[WorkedExample] | None = None,
     verified_source_ids: set[str] | None = None,
     required_gates: list[str] | None = None,
+    minimum_score: float | None = None,
+    evidence_required: bool = True,
     iteration: int = 1,
 ) -> QaBundle:
     """Run every validator and assemble a VerificationResult.
 
     ``iteration`` records which attempt of the QA/revision cycle produced this
     result: 1 for the first pass, 2 after the first revision, and so on.
+    ``minimum_score`` and ``evidence_required`` come from the product spec's
+    ``QualitySpec``/``ConstraintsSpec`` so those declared requirements are
+    actually enforced.
     """
     objective_ids = {objective.id for objective in objectives}
     lesson_ids = {lesson.id for lesson in lessons}
@@ -258,7 +322,7 @@ def build_qa(
             location="answer_key",
             suggested_fix="Every answer in the key must reference an existing question.",
         ),
-        _evidence_gate(ctx, evidence_map),
+        _evidence_gate(ctx, evidence_map, required=evidence_required),
         _gate_from_result(
             ctx,
             name=FACTUAL_CONSISTENCY,
@@ -282,8 +346,9 @@ def build_qa(
     ]
 
     if required_gates:
+        required = sorted(set(required_gates))
         present = {gate.gate_name for gate in gate_list}
-        missing = [name for name in required_gates if name not in present]
+        missing = [name for name in required if name not in present]
         gate_list.append(
             with_content_hash(
                 QualityGate(
@@ -307,6 +372,9 @@ def build_qa(
                 )
             )
         )
+
+    if minimum_score is not None:
+        gate_list.append(_minimum_score_gate(ctx, gates=gate_list, minimum_score=minimum_score))
 
     gates: tuple[QualityGate, ...] = tuple(gate_list)
     status = _overall_status(gates)

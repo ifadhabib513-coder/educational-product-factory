@@ -181,7 +181,7 @@ class TestFactualConsistency:
 class TestQaGateWiring:
     async def test_gate_is_present_in_a_passing_run(self, tmp_path: Path) -> None:
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="fact-pass", seed="s")
+        result = await pipeline.run(_inputs(), run_id="fact-pass")
         assert result.succeeded
         gates = {gate.gate_name: gate for gate in result.verification.gates}  # type: ignore[union-attr]
         assert "factual_consistency" in gates
@@ -206,7 +206,7 @@ class TestQaGateWiring:
         monkeypatch.setattr(pipeline_module, "build_research", ungrounded)
 
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="fact-fail", seed="s")
+        result = await pipeline.run(_inputs(), run_id="fact-fail")
 
         assert not result.succeeded
         assert result.state.stage is RunStage.FAILED
@@ -225,7 +225,6 @@ class TestQaGateWiring:
         result = await pipeline.run(
             _inputs(),
             run_id="fact-req",
-            seed="s",
             required_gates=["factual_consistency"],
         )
         assert result.succeeded
@@ -237,7 +236,7 @@ class TestQaGateWiring:
         """Pydantic enforces schemas at construction, so no ``schema_validity``
         gate is emitted (the old one was hard-wired PASSED and could never fail)."""
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="schema-none", seed="s")
+        result = await pipeline.run(_inputs(), run_id="schema-none")
         assert result.succeeded
         names = [gate.gate_name for gate in result.verification.gates]  # type: ignore[union-attr]
         assert "schema_validity" not in names
@@ -265,7 +264,7 @@ class TestEvidenceCatalogueIsLive:
         monkeypatch.setattr(qa_module, "check_factual_consistency", spy)
 
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="cat", seed="s")
+        result = await pipeline.run(_inputs(), run_id="cat")
         assert result.succeeded
 
         report = next(
@@ -292,7 +291,7 @@ class TestEvidenceCatalogueIsLive:
         monkeypatch.setattr(pipeline_module, "build_research", with_phantom_source)
 
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
-        result = await pipeline.run(_inputs(), run_id="phantom", seed="s")
+        result = await pipeline.run(_inputs(), run_id="phantom")
 
         assert not result.succeeded
         assert result.state.stage is RunStage.FAILED

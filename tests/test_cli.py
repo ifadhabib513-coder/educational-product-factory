@@ -208,3 +208,9 @@ class TestCliInputHygiene:
         )
         assert result.exit_code == 1
         assert "LPF_TIMEOUT" in result.output
+
+    def test_no_seed_option_is_advertised(self) -> None:
+        """The dead ``--seed`` knob was removed rather than left misleading."""
+        result = CliRunner().invoke(main, ["generate", "--help"])
+        assert result.exit_code == 0
+        assert "--seed" not in result.output

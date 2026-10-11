@@ -21,6 +21,7 @@ RESEARCH_EVIDENCE: Final[str] = "research_evidence"
 FACTUAL_CONSISTENCY: Final[str] = "factual_consistency"
 NUMERICAL_CONSISTENCY: Final[str] = "numerical_consistency"
 REQUIRED_GATES_PRESENT: Final[str] = "required_gates_present"
+MINIMUM_SCORE: Final[str] = "minimum_score"
 
 #: The complete catalog of gate names the QA stage can emit. Every name must
 #: appear in exactly one revision ownership set (see :mod:`lpf.orchestration.
@@ -38,4 +39,5 @@ ALL_GATES: Final[tuple[str, ...]] = (
     FACTUAL_CONSISTENCY,
     NUMERICAL_CONSISTENCY,
     REQUIRED_GATES_PRESENT,
+    MINIMUM_SCORE,
 )

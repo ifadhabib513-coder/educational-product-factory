@@ -103,13 +103,12 @@ class FactoryPipeline:
         inputs: DiscoveryInputs,
         *,
         run_id: str = "run",
-        seed: str = "default",
         write: bool = True,
         required_gates: list[str] | None = None,
     ) -> FactoryRunResult:
         """Execute every stage, recording state and events as it goes."""
         validate_run_id(run_id)
-        ctx = RunContext(run_id=run_id, seed=seed, output_dir=self._output_dir)
+        ctx = RunContext(run_id=run_id, output_dir=self._output_dir)
         state = RunState(run_id=run_id)
         events = EventLog(run_id=run_id)
         artifacts: list[BaseModel] = []
@@ -220,6 +219,12 @@ class FactoryPipeline:
                 # --- QA ------------------------------------------------
                 _discard(artifacts, verification_artifacts)
                 self._begin(ctx, state, events, RunStage.QA)
+                # The product spec declares quality requirements; enforce them
+                # rather than leaving ``QualitySpec`` a dead knob. The run's
+                # ``required_gates`` argument is an additional override.
+                effective_required_gates = sorted(
+                    set(required_gates or []) | set(spec.spec.quality.required_gates)
+                )
                 qa: QaBundle = build_qa(
                     ctx,
                     blueprint=syllabus.blueprint,
@@ -235,7 +240,9 @@ class FactoryPipeline:
                     verified_source_ids={
                         source.source_id for source in research.report.verified_sources
                     },
-                    required_gates=required_gates,
+                    required_gates=effective_required_gates,
+                    minimum_score=spec.spec.quality.minimum_score,
+                    evidence_required=spec.spec.constraints.evidence_required,
                     iteration=state.revisions + 1,
                 )
                 verification = qa.verification

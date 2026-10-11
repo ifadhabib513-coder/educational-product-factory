@@ -129,7 +129,6 @@ def package_run(
 
     manifest = {
         "run_id": ctx.run_id,
-        "seed": ctx.seed,
         "stage": state.stage.value,
         "failure_reason": state.failure_reason,
         "timestamps_issued": ctx.tick,

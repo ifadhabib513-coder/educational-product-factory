@@ -416,40 +416,62 @@ class TestFreshness:
 
     def test_undated_is_neutral_not_fresh(self) -> None:
         old, new = self._ts(0), self._ts(100)
-        assert freshness(self._result(None), oldest=old, newest=new) == 0.5
+        assert freshness(self._result(None), oldest=old.timestamp(), newest=new.timestamp()) == 0.5
 
     def test_corpus_relative_not_wall_clock(self) -> None:
         old, new = self._ts(0), self._ts(100)
-        assert freshness(self._result(old), oldest=old, newest=new) == 0.0
-        assert freshness(self._result(new), oldest=old, newest=new) == 1.0
+        assert freshness(self._result(old), oldest=old.timestamp(), newest=new.timestamp()) == 0.0
+        assert freshness(self._result(new), oldest=old.timestamp(), newest=new.timestamp()) == 1.0
 
     def test_shifting_every_date_preserves_ordering(self) -> None:
         """Freshness must not drift with wall-clock time."""
         early, late = self._ts(0), self._ts(100)
         shifted_old, shifted_new = self._ts(1000), self._ts(1100)
-        assert freshness(self._result(early), oldest=early, newest=late) == freshness(
-            self._result(shifted_old), oldest=shifted_old, newest=shifted_new
+        assert freshness(
+            self._result(early), oldest=early.timestamp(), newest=late.timestamp()
+        ) == freshness(
+            self._result(shifted_old),
+            oldest=shifted_old.timestamp(),
+            newest=shifted_new.timestamp(),
         )
-        assert freshness(self._result(late), oldest=early, newest=late) == freshness(
-            self._result(shifted_new), oldest=shifted_old, newest=shifted_new
+        assert freshness(
+            self._result(late), oldest=early.timestamp(), newest=late.timestamp()
+        ) == freshness(
+            self._result(shifted_new),
+            oldest=shifted_old.timestamp(),
+            newest=shifted_new.timestamp(),
         )
 
     def test_single_dated_source_is_neutral(self) -> None:
         when = self._ts(500)
-        assert freshness(self._result(when), oldest=when, newest=when) == 0.5
+        assert (
+            freshness(self._result(when), oldest=when.timestamp(), newest=when.timestamp()) == 0.5
+        )
 
     def test_date_span_ignores_missing_dates(self) -> None:
         results = [self._result(self._ts(10)), self._result(None), self._result(self._ts(30))]
-        assert date_span(results) == (self._ts(10), self._ts(30))
+        assert date_span(results) == (self._ts(10).timestamp(), self._ts(30).timestamp())
 
     def test_date_span_with_no_dates(self) -> None:
         assert date_span([self._result(None)]) == (0.0, 0.0)
 
+    def test_date_span_returns_posix_floats(self) -> None:
+        """The annotation is ``tuple[float, float]``; the values must be floats."""
+        span = date_span([self._result(self._ts(10)), self._result(self._ts(30))])
+        assert all(isinstance(value, float) for value in span)
+
+    def test_freshness_consumes_date_span_directly(self) -> None:
+        """``freshness`` takes ``date_span``'s float output without conversion."""
+        results = [self._result(self._ts(0)), self._result(self._ts(100))]
+        oldest, newest = date_span(results)
+        assert freshness(results[0], oldest=oldest, newest=newest) == 0.0
+        assert freshness(results[1], oldest=oldest, newest=newest) == 1.0
+
     def test_mixed_dated_and_undated(self) -> None:
         old, new = self._ts(0), self._ts(100)
-        assert freshness(self._result(old), oldest=old, newest=new) == 0.0
-        assert freshness(self._result(None), oldest=old, newest=new) == 0.5
-        assert freshness(self._result(new), oldest=old, newest=new) == 1.0
+        assert freshness(self._result(old), oldest=old.timestamp(), newest=new.timestamp()) == 0.0
+        assert freshness(self._result(None), oldest=old.timestamp(), newest=new.timestamp()) == 0.5
+        assert freshness(self._result(new), oldest=old.timestamp(), newest=new.timestamp()) == 1.0
 
 
 class TestConfidenceSemantics:

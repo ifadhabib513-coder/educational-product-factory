@@ -43,7 +43,7 @@ def _inputs() -> DiscoveryInputs:
 
 async def _run(tmp_path: Path, *, run_id: str = "pkg-run"):
     pipeline = FactoryPipeline(output_dir=str(tmp_path))
-    return await pipeline.run(_inputs(), run_id=run_id, seed="s")
+    return await pipeline.run(_inputs(), run_id=run_id)
 
 
 _SAMPLE_MARKDOWN = """\
@@ -352,7 +352,7 @@ class TestPackagingStageOutputs:
         """A bundle must not assume the artifact directory is non-empty."""
         root = tmp_path / "empty"
 
-        ctx = RunContext(run_id="empty", seed="s", output_dir=str(root))
+        ctx = RunContext(run_id="empty", output_dir=str(root))
         verification = with_content_hash(
             VerificationResult(
                 id="ver_1",

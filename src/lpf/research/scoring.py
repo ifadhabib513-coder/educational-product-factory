@@ -260,7 +260,7 @@ def freshness(result: SearchResult, oldest: float, newest: float) -> float:
     if result.published_at is None or newest <= oldest:
         return 0.5
     span = newest - oldest
-    return round(min(1.0, max(0.0, (result.published_at - oldest) / span)), 4)
+    return round(min(1.0, max(0.0, (result.published_at.timestamp() - oldest) / span)), 4)
 
 
 def audience_fit_for(result: SearchResult, level: AudienceLevel) -> float:
@@ -329,15 +329,15 @@ def confidence(
 
 
 def date_span(results: list[SearchResult]) -> tuple[float, float]:
-    """Newest and oldest known timestamps across ``results``.
+    """Oldest and newest known publication times, as POSIX timestamps.
 
     Returns ``(0.0, 0.0)`` when no source carries a date, which makes
     ``freshness`` return its neutral 0.5 for every result.
     """
-    dates = [r.published_at for r in results if r.published_at is not None]
-    if not dates:
+    stamps = [r.published_at.timestamp() for r in results if r.published_at is not None]
+    if not stamps:
         return 0.0, 0.0
-    return min(dates), max(dates)
+    return min(stamps), max(stamps)
 
 
 __all__ = [

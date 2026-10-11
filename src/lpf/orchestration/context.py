@@ -2,7 +2,7 @@
 
 Artifacts default to ``uuid4`` ids and ``datetime.now``. Both would make a run
 irreproducible, so every stage constructs artifacts through this context instead.
-Given the same seed and inputs, a run produces byte-identical artifacts.
+Given the same inputs, a run produces byte-identical artifacts.
 """
 
 from __future__ import annotations
@@ -47,7 +47,6 @@ class RunContext:
     """Deterministic source of ids and timestamps for one pipeline run."""
 
     run_id: str
-    seed: str = "default"
     output_dir: str = "projects"
     _counters: dict[str, int] = field(default_factory=dict)
     _tick: int = 0
