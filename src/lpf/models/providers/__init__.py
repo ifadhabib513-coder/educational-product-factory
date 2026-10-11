@@ -8,6 +8,7 @@ from lpf.errors import ConfigError
 from lpf.models.providers.base import HttpChatModel
 from lpf.models.providers.ollama import OllamaModel
 from lpf.models.providers.openai_compatible import OpenAICompatibleModel
+from lpf.research.transport import RetryPolicy
 
 __all__ = ["HttpChatModel", "OllamaModel", "OpenAICompatibleModel", "create_live_model"]
 
@@ -24,11 +25,14 @@ def create_live_model(
     base_url: str | None = None,
     api_key: str | None = None,
     client: Any = None,
+    retry: RetryPolicy | None = None,
+    timeout_seconds: float = 60.0,
 ) -> HttpChatModel:
     """Build a live adapter by kind name.
 
     ``client`` is an optional ``httpx.AsyncClient`` injected for tests; when
-    omitted each adapter builds a real client with a timeout.
+    omitted each adapter builds a real client with a timeout. ``retry`` and
+    ``timeout_seconds`` configure the bounded retry/backoff policy.
     """
     try:
         cls = _KIND_CLASSES[kind]
@@ -38,4 +42,11 @@ def create_live_model(
             message=f"Unknown model provider kind '{kind}'.",
             details={"kind": kind, "known": sorted(_KIND_CLASSES)},
         ) from exc
-    return cls(model=model, base_url=base_url, api_key=api_key, client=client)
+    return cls(
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        client=client,
+        retry=retry,
+        timeout_seconds=timeout_seconds,
+    )

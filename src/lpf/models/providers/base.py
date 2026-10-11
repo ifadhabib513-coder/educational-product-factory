@@ -15,12 +15,15 @@ shipping a garbage artifact. Transport failures raise
 
 The HTTP client is injectable so tests can substitute ``httpx.MockTransport``
 and stay offline; when none is supplied a real client with a timeout is built.
-Retries and backoff are deliberately out of scope here (owned by the provider
-resilience task) — a failed request raises immediately.
+Transport failures and retryable status codes are retried with bounded,
+deterministic backoff (reusing ``RetryPolicy`` from the research transport); a
+provider that stays down surfaces a stable :class:`lpf.errors.ProviderError`
+instead of crashing or hanging the run.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -30,6 +33,7 @@ from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
 from lpf.errors import ProviderError, ValidationError
+from lpf.research.transport import DEFAULT_RETRY, RetryPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +64,19 @@ class HttpChatModel:
         base_url: str | None = None,
         api_key: str | None = None,
         client: httpx.AsyncClient | None = None,
+        retry: RetryPolicy | None = None,
+        timeout_seconds: float = 60.0,
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> None:
         self.model = model or self.default_model
         self.base_url = (base_url or self.default_base_url).rstrip("/")
         self.api_key = api_key
+        self.retry = retry or DEFAULT_RETRY
+        self.timeout_seconds = timeout_seconds
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self._client = client or _default_client()
+        self._client = client or _default_client(timeout_seconds)
 
     # ------------------------------------------------------------------ wire
     def request_headers(self) -> dict[str, str]:
@@ -114,18 +122,7 @@ class HttpChatModel:
             body.update(self.json_request_field())
 
         url = f"{self.base_url}{self.endpoint}"
-        try:
-            response = await self._client.post(
-                url,
-                json=body,
-                headers=self.request_headers(),
-            )
-        except httpx.HTTPError as exc:
-            raise ProviderError(
-                code="PROVIDER_REQUEST_FAILED",
-                message=f"Model request to {self.base_url} failed: {exc}",
-                details={"endpoint": self.endpoint},
-            ) from exc
+        response = await self._post(url, body=body)
 
         if response.is_error:
             raise ProviderError(
@@ -147,6 +144,70 @@ class HttpChatModel:
         if schema is None:
             return content
         return self._validate_structured(content, schema)
+
+    async def _post(self, url: str, *, body: dict[str, Any]) -> httpx.Response:
+        """POST ``body`` to ``url`` with bounded retry and deterministic backoff.
+
+        Transport failures and retryable status codes (``retry_on_status``) are
+        retried, mirroring the research transport's policy. A 4xx other than
+        429 is never retried: it cannot succeed on replay, so it returns now
+        and the caller raises ``PROVIDER_HTTP_ERROR``. When every attempt
+        fails, a ``ProviderError`` names how many attempts were made, keeping
+        the failure readable and deterministic.
+        """
+        last_failure = "no attempt made"
+        max_attempts = self.retry.max_attempts
+
+        for attempt in range(1, max_attempts + 1):
+            delay = self.retry.delay_for(attempt)
+            if delay > 0:
+                logger.warning(
+                    "Retrying %s in %.2fs (attempt %d/%d)",
+                    url,
+                    delay,
+                    attempt,
+                    max_attempts,
+                )
+                await asyncio.sleep(delay)
+
+            try:
+                response = await self._client.post(
+                    url,
+                    json=body,
+                    headers=self.request_headers(),
+                )
+            except httpx.HTTPError as exc:
+                last_failure = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    "Model request to %s failed (attempt %d/%d): %s",
+                    url,
+                    attempt,
+                    max_attempts,
+                    exc,
+                )
+                continue
+
+            if response.status_code in self.retry.retry_on_status:
+                last_failure = f"HTTP {response.status_code}"
+                logger.warning(
+                    "Retryable status %d from %s (attempt %d/%d)",
+                    response.status_code,
+                    url,
+                    attempt,
+                    max_attempts,
+                )
+                continue
+
+            return response
+
+        raise ProviderError(
+            code="PROVIDER_REQUEST_FAILED",
+            message=(
+                f"Model request to {self.base_url} failed after "
+                f"{max_attempts} attempt(s); last failure: {last_failure}."
+            ),
+            details={"last_failure": last_failure, "endpoint": self.endpoint},
+        )
 
     async def count_tokens(self, text: str) -> int:
         """Whitespace token estimate, matching the offline model."""

@@ -21,6 +21,7 @@ from lpf.models import OllamaModel, OpenAICompatibleModel, create_live_model
 from lpf.models.provider import ModelProvider
 from lpf.orchestration.model import protocol_satisfied
 from lpf.orchestration.pipeline import FactoryPipeline
+from lpf.research.transport import RetryPolicy
 from lpf.schemas.discovery import DiscoveryInputs
 
 OPENAI_BASE = "https://api.openai.com/v1"
@@ -145,8 +146,8 @@ class TestOpenAICompatibleModel:
         assert excinfo.value.code == "MODEL_OUTPUT_INVALID_SCHEMA"
         assert "LessonDraft" in excinfo.value.message
 
-    async def test_http_error_status_raises_provider_error(self) -> None:
-        provider = OpenAICompatibleModel(client=_client(lambda r: httpx.Response(500, text="boom")))
+    async def test_non_retryable_http_error_raises_provider_error(self) -> None:
+        provider = OpenAICompatibleModel(client=_client(lambda r: httpx.Response(401)))
         with pytest.raises(ProviderError) as excinfo:
             await provider.generate(messages=[{"role": "user", "content": "hi"}])
         assert excinfo.value.code == "PROVIDER_HTTP_ERROR"
@@ -155,7 +156,10 @@ class TestOpenAICompatibleModel:
         def handler(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectError("no route to host")
 
-        provider = OpenAICompatibleModel(client=_client(handler))
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=1, backoff_seconds=0.0),
+        )
         with pytest.raises(ProviderError) as excinfo:
             await provider.generate(messages=[{"role": "user", "content": "hi"}])
         assert excinfo.value.code == "PROVIDER_REQUEST_FAILED"
@@ -239,6 +243,109 @@ class TestOllamaModel:
         provider = OllamaModel(client=_client(lambda r: httpx.Response(200)))
         assert provider.model == "llama3.2"
         assert provider.base_url == "http://localhost:11434"
+
+
+# ---------------------------------------------------------------------------
+# Resilience: bounded retry, deterministic backoff (TASK-008)
+# ---------------------------------------------------------------------------
+
+
+class TestProviderResilience:
+    def _flaky(
+        self,
+        *,
+        failures: list[str],
+    ):
+        """Handler that raises ConnectError or returns a status per call."""
+        calls = {"count": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            step = min(calls["count"], len(failures) - 1)
+            calls["count"] += 1
+            behaviour = failures[step]
+            if behaviour == "connect":
+                raise httpx.ConnectError("no route to host")
+            if behaviour.isdigit():
+                return httpx.Response(int(behaviour))
+            return httpx.Response(200, json=_openai_payload(behaviour))
+
+        return handler, calls
+
+    async def test_retryable_status_then_success(self) -> None:
+        handler, calls = self._flaky(failures=["503", "503", "ok"])
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=3, backoff_seconds=0.0),
+        )
+        text = await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert text == "ok"
+        assert calls["count"] == 3
+
+    async def test_transport_failure_then_success(self) -> None:
+        handler, calls = self._flaky(failures=["connect", "connect", "ok"])
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=3, backoff_seconds=0.0),
+        )
+        text = await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert text == "ok"
+        assert calls["count"] == 3
+
+    async def test_retries_are_bounded(self) -> None:
+        handler, calls = self._flaky(failures=["connect", "connect", "connect", "connect"])
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=4, backoff_seconds=0.0),
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert excinfo.value.code == "PROVIDER_REQUEST_FAILED"
+        assert calls["count"] == 4
+        assert "4 attempt(s)" in excinfo.value.message
+        assert excinfo.value.details["last_failure"].startswith("ConnectError")
+
+    async def test_constant_retryable_status_failure_message(self) -> None:
+        handler, calls = self._flaky(failures=["503", "503", "503"])
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=3, backoff_seconds=0.0),
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert "3 attempt(s)" in excinfo.value.message
+        assert excinfo.value.details["last_failure"] == "HTTP 503"
+        assert calls["count"] == 3
+
+    async def test_non_retryable_status_is_not_retried(self) -> None:
+        handler, calls = self._flaky(failures=["401", "401", "401"])
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=3, backoff_seconds=0.0),
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert excinfo.value.code == "PROVIDER_HTTP_ERROR"
+        assert calls["count"] == 1
+
+    async def test_backoff_delays_are_deterministic(self, monkeypatch) -> None:
+        import lpf.models.providers.base as base
+
+        recorded: list[float] = []
+        real_sleep = base.asyncio.sleep
+
+        async def fake_sleep(delay: float) -> None:
+            recorded.append(delay)
+            await real_sleep(0.0)
+
+        monkeypatch.setattr(base.asyncio, "sleep", fake_sleep)
+        handler, _ = self._flaky(failures=["connect", "connect", "ok"])
+        provider = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=3, backoff_seconds=0.25, backoff_multiplier=2.0),
+        )
+        text = await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert text == "ok"
+        assert recorded == [0.25, 0.5]
 
 
 # ---------------------------------------------------------------------------
@@ -380,3 +487,22 @@ class TestMalformedOutputFailsRun:
         assert RunStage.CONTENT in visited
         assert RunStage.QA not in visited
         assert EventType.RUN_FAILED in {event.event_type for event in result.events.events}
+
+
+class TestProviderDownFailsRun:
+    async def test_constant_provider_failure_is_readable_and_deterministic(
+        self, tmp_path: Path
+    ) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("no route to host")
+
+        model = OpenAICompatibleModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=3, backoff_seconds=0.0),
+        )
+        pipeline = FactoryPipeline(output_dir=str(tmp_path), model=model)
+        result = await pipeline.run(_inputs(), run_id="provider-down")
+        assert not result.succeeded
+        assert result.verification is None
+        assert "PROVIDER_REQUEST_FAILED" in result.state.failure_reason
+        assert "3 attempt(s)" in result.state.failure_reason

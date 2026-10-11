@@ -372,6 +372,10 @@ Discovery through Packaging run as one pipeline; `lpf generate --live-research`
 builds its evidence from real arXiv and Wikimedia sources through the same
 ranking engine that is verified against live services. QA can rewind to content
 or assessment and repair repairable gate failures, bounded by a revision budget.
+Live model calls are now resilient: TASK-008 added bounded retry with
+deterministic exponential backoff and a configurable timeout, so a flaky host
+is absorbed and a provider that stays down fails the run with a stable, readable
+`ProviderError` instead of hanging.
 
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is

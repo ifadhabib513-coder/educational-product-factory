@@ -12,9 +12,11 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 5 | 2026-10-08 | TASK-005 | Multi-Format Packaging (HTML and ZIP Bundle) | Completed | `2b7a061` |
 | 6 | 2026-10-08 | TASK-006 | Bounded Cyclic Stage Machine Revision Loop | Completed | `b116f0c` |
 | 7 | 2026-10-11 | TASK-007 | Live Model Provider Adapters (OpenAI-compatible + Ollama) with structured-output validation | Completed | `e9b8f7f` |
+| 8 | 2026-10-11 | TASK-008 | Provider Resilience (bounded retry, timeout, deterministic backoff) | Completed | `6d594be` |
 
-> **v0.7.0 milestone complete** — TASK-001 through TASK-006 are all done. The
-> next iteration needs a new milestone section in `tasks.md`.
+> **v0.8.0 milestone in progress** — TASK-007 and TASK-008 are complete
+> (live model seam + resilience). Remaining: TASK-009 revision-loop proof,
+> TASK-010 intent-aware retrieval routing, TASK-011 CLI/config exposure.
 
 ---
 ## Detailed Iteration Logs
@@ -125,3 +127,16 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - Protocol conformance: both adapters satisfy `ModelProvider` (`isinstance` + `protocol_satisfied`).
   - Pipeline wiring: `OpenAICompatibleModel` over `httpx.MockTransport` runs the full offline pipeline and produces a byte-identical tree across two runs; a `ValidationError` from the adapter aborts the run at content before QA (test `TestMalformedOutputFailsRun`).
   - `tests/` never touches the network — every live-ish test runs against `httpx.MockTransport`.
+
+### Iteration 8 — 2026-10-11: TASK-008
+- **Task**: Provider resilience — bounded retry, timeout, and deterministic backoff for live model calls, surfacing a stable `ProviderError` when a provider stays down.
+- **Rationale**: Hosts fail; a content run must neither crash nor hang. TASK-007 shipped the HTTP seam but with a single-shot call.
+- **Changes**:
+  - `base.py` (`HttpChatModel`) gains `retry: RetryPolicy | None = None` (defaults to `DEFAULT_RETRY` from `research/transport.py`) and `timeout_seconds: float = 60.0` (baked into the injectable/real `AsyncClient`).
+  - New `_post()` is one bounded loop over `range(1, max_attempts + 1)`: retries transport `httpx.HTTPError` and statuses in `retry_on_status` (429, 5xx); any other 4xx returns immediately so the caller raises `PROVIDER_HTTP_ERROR` (never replayed). Backoff is `retry.delay_for(attempt)` — deterministic, no jitter. Exhaustion raises `PROVIDER_REQUEST_FAILED` with `"{max_attempts} attempt(s); last failure: ..."`.
+  - `OpenAICompatibleModel`, `OllamaModel`, and `create_live_model` forward `retry`/`timeout_seconds`.
+- **Verification**:
+  - `python -m pytest tests/`: 834 passed (7 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 158 files already formatted.
+  - Mutation-tested (8/8 caught): retry loop pinned to one attempt, loop unbounded up to 10, retryable-status branch disabled, transport-retry replaced with a re-raise, lost `last_failure` recording, message dropping the attempt count, backoff sleep disabled, HTTP-error guard dropped.
+  - New tests: flaky status/transport recovery (recovered after 3 tries), bounded call count on constant failure, non-retryable 401 never replayed, deterministic exhaustion message with `last_failure`, recorded backoff delays `[0.25, 0.5]` (backoff_multiplier 2.0), and an end-to-end constant-failure run whose `failure_reason` carries `PROVIDER_REQUEST_FAILED` and `3 attempt(s)`.

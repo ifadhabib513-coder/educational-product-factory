@@ -86,12 +86,13 @@
     - Tests: `tests/test_model_providers.py` (26 tests) over `httpx.MockTransport` — the same offline-transport convention as the research providers.
     - Mutation-tested 13/13 caught (JSON guard, non-dict guard, error codes, pydantic swallow, JSON request field, HTTP status guard, transport catch, both `parse_content` paths, both default model names, auth header, factory fallback).
 
-- [ ] **TASK-008**: Add Provider Resilience (retry, timeout, backoff)
+- [x] **TASK-008**: Add Provider Resilience (retry, timeout, backoff)
   - **Objective**: Hosts fail; a content run must neither crash nor hang. Add bounded retry, timeout, and exponential backoff to live model calls and surface a stable `ProviderError` (an `LpfError`) when a provider stays down.
   - **Acceptance Criteria**:
     - A flaky fake provider (fails once then succeeds) completes; a constant-failure fake provider fails the run with a readable, deterministic message.
     - Retries are budgeted (no unbounded loops), reusing the HTTP transport patterns already in `research/transport.py`.
     - Unit tests with flaky/always-failing fake providers; full pytest suite and ruff linters pass.
+  - **Implementation notes**: `HttpChatModel` gains `retry: RetryPolicy | None = None` (defaults to `DEFAULT_RETRY`) and `timeout_seconds` (builds the injected/real `AsyncClient` with it). `_post()` is one bounded loop over `range(1, max_attempts + 1)`: retries transport `httpx.HTTPError` and statuses in `retry_on_status` (429, 5xx), returns non-retryable responses immediately for the caller's `PROVIDER_HTTP_ERROR`. Backoff is `retry.delay_for(attempt)` (deterministic, no jitter). Exhaustion raises `PROVIDER_REQUEST_FAILED` carrying `"{attempts} attempt(s); last failure: ..."`. `OpenAICompatibleModel`/`OllamaModel`/`create_live_model` forward both options. Tests: flaky status/transport recovery, bounded call counts, non-retryable 4xx never replayed, recorded backoff delays `[0.25, 0.5]`, and an end-to-end constant-failure run whose `failure_reason` contains `PROVIDER_REQUEST_FAILED` and `3 attempt(s)`. Plus 8/8 mutation-kill harness. Suite: 834 passed, ruff clean.
 
 - [ ] **TASK-009**: Prove the Revision Loop Repairs a Model-Written Defect
   - **Objective**: TASK-006's cycle must hold with a real writer, not just an injected one: a (fake) live model that emits a wrong worked-example answer on its first draft is retried on the `qa → content` re-run, and the run completes.

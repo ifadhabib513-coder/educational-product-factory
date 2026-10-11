@@ -35,6 +35,8 @@ class OpenAICompatibleModel(HttpChatModel):
         base_url: str | None = None,
         api_key: str | None = None,
         client: Any = None,
+        retry: Any = None,
+        timeout_seconds: float = 60.0,
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> None:
@@ -43,6 +45,8 @@ class OpenAICompatibleModel(HttpChatModel):
             base_url=base_url,
             api_key=api_key,
             client=client,
+            retry=retry,
+            timeout_seconds=timeout_seconds,
             temperature=temperature,
             max_tokens=max_tokens,
         )
