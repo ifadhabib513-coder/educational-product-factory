@@ -419,8 +419,18 @@ same report and evidence-map hashes — closing the last hidden nondeterminism
 behind the stage seam. QA gate names are also now a single source of truth
 (`lpf.orchestration.gates`): the revision-ownership sets and the QA stage both
 reference the same constants, and tests prove the emitted catalog equals the
-owned catalog. The remaining audit workstreams — CLI hygiene, contract-honesty
-knobs, and dead-code removal — are queued as TASK-014+.
+owned catalog.
+
+**The operator-facing edges are hardened (TASK-014).** `LPF_TIMEOUT` now parses
+tolerantly and reports bad values as a readable `ConfigError` instead of crashing
+startup; `run_id` is validated at the pipeline boundary so a `..\..\evil` id can
+never escape the output directory; the HTTP clients the process owns (writer
+model and live research providers) are released after every run, success or
+failure, while injected clients are left open; live research providers honour the
+configured timeout instead of a hardcoded one; and the ZIP bundle's claim is
+scoped to what it can actually guarantee (fixed per-entry metadata, byte-identity
+for a given zlib build). The remaining audit workstreams — contract-honesty
+knobs and dead-code removal — are queued as TASK-015+.
 
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is

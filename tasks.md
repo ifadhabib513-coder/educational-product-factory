@@ -156,3 +156,26 @@
     - Cross-check tests: catalog == union of the ownership sets; each catalog gate in exactly one set; a default run emits every unconditional catalog gate; a `required_gates` run emits the whole catalog.
     - Full pytest suite and ruff linters pass; 5-point mutation harness killed 5/5.
   - **Implementation notes**: new `lpf.domain.identity.seeded_id(*parts)` — `sha256("|".join(parts))` truncated to 32 hex — used by all four adapters (`arxiv`, `wikimedia`, `tavily`, `searxng`); the mock keeps `ctx.id` and dedupe still keys on URL, so offline bytes are unchanged. `_normalise_report` continues to normalise stage-boundary ids/timestamps; with seeded ids the whole research output is reproducible given identical responses (ADR-009 limitations bullet updated). New `src/lpf/orchestration/gates.py` catalog; `revision.py` and `qa_stage.py` import the constants. Tests: `TestSeededId` (+3), provider-level determinism across all four adapters, staged-live E2E determinism in `test_e2e_pipeline.py`, and `TestRoutingTable`/`TestGateCatalogSurface` cross-checks in `test_revision_loop.py`. Suite: 902 passed, ruff clean. Mutation harness `%TEMP%\opencode\mutate_phase_b.py`, 5/5 killed.
+
+---
+
+## v0.8.1 Milestone Tasks — Whole-Codebase Audit Fixes (Phase C: CLI/config hygiene)
+
+> Phase C closes the audit's operator-facing hygiene items: a non-integer
+> `LPF_TIMEOUT` crashed startup with a raw `ValueError` (3.1); `--run-id` flowed
+> unchecked into directory/archive/file names (3.2); live `httpx.AsyncClient`s
+> were never closed (3.3); research providers ignored the configured timeout
+> (3.4); and the ZIP bundle's reproducibility docstring overclaimed
+> cross-platform byte-identity (3.5).
+
+- [x] **TASK-014**: CLI/Config Hygiene (timeout parsing, run-id safety, client lifecycle, timeout threading, honest bundle claim)
+  - **Objective**: (1) parse `LPF_TIMEOUT`/`[run].timeout` tolerantly and fail readably on bad values; (2) reject any `run_id` that could escape the output directory at the pipeline boundary, not just in the CLI; (3) release the HTTP clients the process owns; (4) forward the configured timeout into live research providers; (5) state the bundle's real reproducibility guarantee and pin it with an asserted-metadata test.
+  - **Acceptance Criteria**:
+    - A non-numeric, non-positive, or non-finite `LPF_TIMEOUT` is a readable `ConfigError(code="INVALID_TIMEOUT")`, never a traceback; decimal values are accepted.
+    - `validate_run_id` rejects `/`, `\\`, leading dots, empty, and >64-char ids with `ConfigError(code="INVALID_RUN_ID")` and no file is written outside the output dir; ordinary ids still pass.
+    - The CLI closes owned model/research clients after every run (success or failure) via `FactoryPipeline.aclose()`; injected clients are left open.
+    - Live research providers honour `config.timeout_seconds` (passed from the CLI) instead of a hardcoded 20s.
+    - The bundle docstring scopes the byte-identity claim to a given zlib build and a test asserts the pinned per-entry metadata.
+    - Full pytest suite and ruff linters pass; 8-point mutation harness killed 8/8.
+  - **Implementation notes**: `config._parse_timeout` uses `float()` with a positivity/finiteness guard and `max(1, round(...))`, raising `ConfigError`; `main()` wraps `load_config` so a bad env/TOML is a `ClickException`. New `orchestration.context.validate_run_id` (`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`) is called at the top of `FactoryPipeline.run`, so programmatic callers are covered; the CLI maps the resulting `ConfigError` to a `ClickException`. `HttpTransport.aclose()` plus `_owns_transport`/`_owns_client` flags make providers (`arxiv`, `wikimedia`, `tavily`, `searxng`), `HttpChatModel`, and `FactoryPipeline.aclose()` close only what they created; the CLI runs the pipeline in `try/finally`. Provider constructors take keyword-only `timeout_seconds` forwarded to `build_client`, wired from `config.timeout_seconds` in the CLI. `bundle.py`'s claim is scoped to a given zlib implementation, backed by a metadata-pinning test. Tests: `TestTimeoutParsing`, `TestCliInputHygiene`, `TestRunIdValidation`, `TestConfiguredTimeout`, `TestProviderClientLifecycle`, `TestClientLifecycle`, and the bundle metadata test. Suite: 953 passed, ruff clean. Mutation harness `%TEMP%\opencode\mutate_phase_c.py`, 8/8 killed.
+

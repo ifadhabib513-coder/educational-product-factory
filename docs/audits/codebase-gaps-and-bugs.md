@@ -184,7 +184,11 @@ Each phase = its own TASK entry in `tasks.md`, with: implementation, regression 
   (`source_id` is now `seeded_id(provider, url)` in every shipped adapter; stage
   boundary normalises the rest, so identical responses → byte-identical runs.
   Gate names now live in `lpf.orchestration.gates` and route through it.)
-- **Phase C — CLI hygiene:** items 3.1–3.5.
+- **Phase C — CLI hygiene:** items 3.1–3.5. **DONE — TASK-014.**
+  (`LPF_TIMEOUT` parses tolerantly; `validate_run_id` guards the pipeline
+  boundary; owned HTTP clients are closed via `aclose()`; providers take the
+  configured timeout; the bundle's byte-identity claim is scoped to a zlib build
+  and pinned by a metadata test.)
 - **Phase D — contract honesty:** items 4.*.
 - **Phase E — dead code removal (the coverage lever):** items 5.* scoped removals, then
   re-run coverage and record new numbers.
