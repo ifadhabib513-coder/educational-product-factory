@@ -17,7 +17,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 10 | 2026-10-11 | TASK-010 | Route Retrieval by Query Intent (per-question provider pruning keyed on intent) | Completed | `34e38d1` |
 | 11 | 2026-10-11 | TASK-011 | Expose Model Provider Selection in CLI and Config (`--model`, env, `lpf.toml`) | Completed | `419c3c4` |
 | 12 | 2026-10-11 | TASK-012 | Fix the Five Verified P0 Bugs from the Whole-Codebase Audit (provider kind mismatch, research-owned gate routing, terminal-state crash, ValueError escapes, decorative schema gate) | Completed | `67c9b1b`, `6a74519` |
-| 13 | 2026-10-11 | TASK-013 | Live-Run Determinism (seeded source ids, stage-boundary reproducibility) + Gate-Name Single Source of Truth (`orchestration/gates.py`) | Completed | `(pending)` |
+| 13 | 2026-10-11 | TASK-013 | Live-Run Determinism (seeded source ids, stage-boundary reproducibility) + Gate-Name Single Source of Truth (`orchestration/gates.py`) | Completed | `d48d391`, `3b36e0a` |
 
 > **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
 > seam: `lpf generate --model openai-compatible|ollama` selects the writer
