@@ -253,8 +253,8 @@ def is_known_domain(url_or_domain: str) -> bool:
 def authority_rank(authority: SourceAuthority) -> int:
     """Numeric rank for an authority tier, highest tier = 7.
 
-    Used for ordering and for the weighted score in
-    :meth:`lpf.research.service.ResearchService.rank_sources`.
+    Used for ordering and for the weighted relevance score in
+    :mod:`lpf.research.pipeline`.
     """
     return {
         SourceAuthority.PRIMARY: 7,

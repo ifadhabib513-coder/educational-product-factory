@@ -20,10 +20,8 @@ class EventType(StrEnum):
     RUN_STARTED = "run_started"
     STAGE_STARTED = "stage_started"
     STAGE_COMPLETED = "stage_completed"
-    STAGE_FAILED = "stage_failed"
     #: QA rewound to an earlier stage to repair a gate failure.
     REVISION_STARTED = "revision_started"
-    VALIDATION_WARNING = "validation_warning"
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"
 

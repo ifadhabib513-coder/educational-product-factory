@@ -6,13 +6,11 @@ import pytest
 
 from lpf.research.providers.base import MockSearchProvider
 from lpf.research.router import ResearchRouter
-from lpf.research.service import ResearchService
 from lpf.schemas.research import (
     ResearchQuestion,
     SearchProvider,
     SearchResult,
     SearchStrategy,
-    SourceAuthority,
 )
 
 # ---------------------------------------------------------------------------
@@ -101,60 +99,3 @@ class TestResearchRouter:
         provider = MockSearchProvider()
         router.register_provider(provider)
         assert SearchProvider.MOCK in router.available_providers
-
-
-# ---------------------------------------------------------------------------
-# Tests: ResearchService
-# ---------------------------------------------------------------------------
-
-
-class TestResearchService:
-    @pytest.mark.asyncio
-    async def test_search_web(self) -> None:
-        provider = MockSearchProvider(results=[_make_result()])
-        router = ResearchRouter(providers={SearchProvider.MOCK: provider})
-        service = ResearchService(router)
-        results = await service.search_web("test")
-        assert len(results) == 1
-
-    @pytest.mark.asyncio
-    async def test_search_deduplication(self) -> None:
-        r1 = _make_result(url="https://a.com")
-        r2 = _make_result(url="https://a.com")  # duplicate
-        r3 = _make_result(url="https://b.com")
-        provider = MockSearchProvider(results=[r1, r2, r3])
-        router = ResearchRouter(providers={SearchProvider.MOCK: provider})
-        service = ResearchService(router)
-        results = await service.search_web("test")
-        assert len(results) == 2  # duplicates removed
-
-    def test_rank_sources(self) -> None:
-        r1 = SearchResult(
-            source_id="s1",
-            title="Academic",
-            url="https://arxiv.org",
-            snippet="",
-            domain="arxiv.org",
-            authority=SourceAuthority.ACADEMIC,
-            relevance_score=0.8,
-            provider=SearchProvider.ARXIV,
-        )
-        r2 = SearchResult(
-            source_id="s2",
-            title="General",
-            url="https://example.com",
-            snippet="",
-            domain="example.com",
-            authority=SourceAuthority.GENERAL,
-            relevance_score=0.9,
-            provider=SearchProvider.MOCK,
-        )
-        ranked = ResearchService.rank_sources([r2, r1])
-        # Academic should rank higher despite lower relevance due to authority weight
-        assert ranked[0].authority == SourceAuthority.ACADEMIC
-
-    def test_verify_source(self) -> None:
-        r = _make_result()
-        vs = ResearchService.verify_source(r)
-        assert vs.source_id == r.source_id
-        assert vs.exists is True

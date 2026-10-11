@@ -39,25 +39,6 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.4",
 ]
-crew = [
-    "langgraph>=0.4",
-    "langgraph-checkpoint>=4.2",
-    "langchain-core>=0.3",
-    "crewai>=1.15",
-    "crewai-tools>=0.14",
-]
-render = [
-    "jinja2>=3.1",
-    "weasyprint>=63",
-    "pymupdf>=1.24",
-]
-api = [
-    "fastapi>=0.115",
-    "uvicorn>=0.32",
-]
-all = [
-    "lpf[crew,render,api]",
-]
 
 [project.scripts]
 lpf = "lpf.cli:main"
@@ -90,5 +71,11 @@ known-first-party = ["lpf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --cov=lpf --cov-report=term-missing --cov-fail-under=97"
 asyncio_mode = "auto"
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

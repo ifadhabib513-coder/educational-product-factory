@@ -214,3 +214,80 @@ class TestCliInputHygiene:
         result = CliRunner().invoke(main, ["generate", "--help"])
         assert result.exit_code == 0
         assert "--seed" not in result.output
+
+
+class TestCliReporting:
+    """The CLI reports a failed run and echoes the wired research providers."""
+
+    def test_a_failed_run_reports_the_stage_and_reason(self, tmp_path: Path, monkeypatch) -> None:
+
+        class FakeStage:
+            value = "qa"
+
+        class FakeState:
+            stage = FakeStage()
+            failure_reason = "gate failed"
+
+        class FakeResult:
+            succeeded = False
+            state = FakeState()
+
+        class FakePipeline:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            async def run(self, inputs, run_id):
+                return FakeResult()
+
+            async def aclose(self) -> None:
+                pass
+
+        monkeypatch.setattr("lpf.cli.FactoryPipeline", FakePipeline)
+        result = CliRunner().invoke(
+            main,
+            ["generate", "Physics", "Projectile Motion", "--run-id", "cli-test"],
+            env={"LPF_OUTPUT_DIR": str(tmp_path)},
+        )
+        assert result.exit_code == 1
+        assert "Run failed at stage 'qa'." in result.output
+        assert "Reason: gate failed" in result.output
+
+    def test_live_research_wires_the_real_providers(self, tmp_path: Path, monkeypatch) -> None:
+        from lpf.schemas.research import SearchProvider
+
+        captured: dict = {}
+
+        class FakeResult:
+            run_id = "cli-test"
+            succeeded = True
+            artifacts: list = []
+            verification = None
+            package = None
+
+        class FakePipeline:
+            def __init__(self, **kwargs) -> None:
+                captured.update(kwargs)
+
+            async def run(self, inputs, run_id):
+                return FakeResult()
+
+            async def aclose(self) -> None:
+                pass
+
+        monkeypatch.setattr("lpf.cli.FactoryPipeline", FakePipeline)
+        result = CliRunner().invoke(
+            main,
+            [
+                "generate",
+                "Physics",
+                "Projectile Motion",
+                "--run-id",
+                "cli-test",
+                "--live-research",
+            ],
+            env={"LPF_OUTPUT_DIR": str(tmp_path)},
+        )
+        assert result.exit_code == 0, result.output
+        providers = captured["research_providers"]
+        assert set(providers) == {SearchProvider.ARXIV, SearchProvider.WIKIMEDIA}
+        assert "Research providers: arxiv, wikimedia" in result.output

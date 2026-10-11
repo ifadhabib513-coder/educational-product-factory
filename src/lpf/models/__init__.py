@@ -13,7 +13,6 @@ from lpf.models.providers import (
     OpenAICompatibleModel,
     create_live_model,
 )
-from lpf.models.registry import PromptRegistry, PromptTemplate
 
 __all__ = [
     "HttpChatModel",
@@ -23,8 +22,6 @@ __all__ = [
     "MockProvider",
     "OllamaModel",
     "OpenAICompatibleModel",
-    "PromptRegistry",
-    "PromptTemplate",
     "TaskType",
     "create_live_model",
 ]

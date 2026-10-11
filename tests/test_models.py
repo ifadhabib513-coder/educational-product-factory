@@ -1,4 +1,4 @@
-"""Tests for model provider, router, and prompt registry."""
+"""Tests for model provider and router."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from lpf.models.provider import (
     ModelTier,
     TaskType,
 )
-from lpf.models.registry import PromptRegistry, PromptTemplate
 
 # ---------------------------------------------------------------------------
 # Tests: MockProvider
@@ -102,60 +101,8 @@ class TestModelRouter:
 
 
 # ---------------------------------------------------------------------------
-# Tests: PromptRegistry
+# Tests: DeterministicMockModel guards
 # ---------------------------------------------------------------------------
-
-
-class TestPromptRegistry:
-    def test_register_and_get(self) -> None:
-        registry = PromptRegistry()
-        template = PromptTemplate(
-            name="test_prompt",
-            version="1.0",
-            system_prompt="You are a test.",
-            user_prompt_template="Answer {question}",
-        )
-        registry.register(template)
-        got = registry.get("test_prompt")
-        assert got.version == "1.0"
-
-    def test_get_specific_version(self) -> None:
-        registry = PromptRegistry()
-        registry.register(
-            PromptTemplate(
-                name="test",
-                version="1.0",
-                system_prompt="sys1",
-                user_prompt_template="v1",
-            )
-        )
-        registry.register(
-            PromptTemplate(
-                name="test",
-                version="2.0",
-                system_prompt="sys2",
-                user_prompt_template="v2",
-            )
-        )
-        v1 = registry.get("test", version="1.0")
-        v2 = registry.get("test", version="2.0")
-        assert v1.user_prompt_template == "v1"
-        assert v2.user_prompt_template == "v2"
-
-    def test_missing_prompt_raises(self) -> None:
-        registry = PromptRegistry()
-        with pytest.raises(KeyError, match="No prompt registered"):
-            registry.get("nonexistent")
-
-    def test_list_prompts(self) -> None:
-        registry = PromptRegistry()
-        registry.register(
-            PromptTemplate(name="alpha", version="1.0", system_prompt="", user_prompt_template="")
-        )
-        registry.register(
-            PromptTemplate(name="beta", version="1.0", system_prompt="", user_prompt_template="")
-        )
-        assert registry.list_prompts() == ["alpha", "beta"]
 
 
 class TestDeterministicMockModelGuards:
@@ -177,14 +124,3 @@ class TestDeterministicMockModelGuards:
                 messages=[{"role": "user", "content": "anything"}], schema=NeverAskedFor
             )
         assert excinfo.value.code == "UNSUPPORTED_SCHEMA"
-
-    def test_render_user(self) -> None:
-        template = PromptTemplate(
-            name="test",
-            version="1.0",
-            system_prompt="sys",
-            user_prompt_template="Solve {problem} for {variable}",
-        )
-        rendered = template.render_user(problem="2x+3=7", variable="x")
-        assert "2x+3=7" in rendered
-        assert "x" in rendered

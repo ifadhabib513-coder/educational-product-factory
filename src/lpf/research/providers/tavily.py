@@ -1,7 +1,7 @@
 """Tavily provider — AI search with page extraction.
 
 Tavily returns cleaned page content alongside results, so it is the preferred
-provider for ``extract_url``. Requires an API key.
+provider for page extraction. Requires an API key.
 """
 
 from __future__ import annotations

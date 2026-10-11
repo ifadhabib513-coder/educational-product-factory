@@ -4,10 +4,9 @@ Turns a raw caller request into the structured artifacts the rest of the factory
 reads: who the learner is, what problem they have, what success looks like, the
 product opportunity, and the product specification.
 
-This is the deterministic offline implementation of the Discovery crew. The crew
-contracts in ``lpf.crews.discovery`` describe the same responsibilities for the
-model-backed path; the artifact shapes are identical, so a later version can swap
-the implementation without changing anything downstream. See ADR-008.
+This is the deterministic offline implementation of the Discovery responsibilities;
+the artifact shapes match what a model-backed path would produce, so a later version
+can swap the implementation without changing anything downstream. See ADR-008.
 """
 
 from __future__ import annotations

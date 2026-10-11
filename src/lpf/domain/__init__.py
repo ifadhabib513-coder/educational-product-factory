@@ -15,7 +15,6 @@ from lpf.domain.assessment import (
 )
 from lpf.domain.content import SolutionStep, SourceRef
 from lpf.domain.curriculum import CurriculumBlueprint, CurriculumUnit
-from lpf.domain.evidence import EvidenceKind, EvidenceRecord, VerificationStatus
 from lpf.domain.identity import compute_content_hash, new_id, with_content_hash
 from lpf.domain.learner import LearnerProfile
 from lpf.domain.lesson import Lesson
@@ -70,8 +69,6 @@ __all__ = [
     "CurriculumBlueprint",
     "CurriculumUnit",
     "DifficultyLevel",
-    "EvidenceKind",
-    "EvidenceRecord",
     "Finding",
     "FormatSpec",
     "GateStatus",
@@ -100,7 +97,6 @@ __all__ = [
     "SourceRef",
     "TargetAudience",
     "VerificationResult",
-    "VerificationStatus",
     "WorkedExample",
     "check_answer_key_references",
     "check_answer_references",

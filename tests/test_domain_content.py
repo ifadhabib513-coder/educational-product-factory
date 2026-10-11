@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from lpf.domain.content import SolutionStep, SourceRef
-from lpf.domain.evidence import EvidenceKind, EvidenceRecord
+from lpf.domain.content import SolutionStep
 from lpf.domain.identity import compute_content_hash, with_content_hash
 from lpf.domain.learner import LearnerProfile
 from lpf.domain.lesson import Lesson
@@ -68,16 +67,6 @@ def _make_misconception(objs: list[LearningObjective]) -> Misconception:
             correction="All objects accelerate equally under gravity",
             objective_ids=[objs[0].id],
             severity=MisconceptionSeverity.COMMON,
-        )
-    )
-
-
-def _make_evidence() -> EvidenceRecord:
-    return with_content_hash(
-        EvidenceRecord(
-            claim="Velocity equals displacement divided by time",
-            evidence_kind=EvidenceKind.DIRECT_SOURCE,
-            source=SourceRef(source_type="book", identifier="Halliday & Resnick"),
         )
     )
 
@@ -171,39 +160,6 @@ class TestMisconception:
 
 
 # ---------------------------------------------------------------------------
-# Tests: EvidenceRecord
-# ---------------------------------------------------------------------------
-
-
-class TestEvidenceRecord:
-    def test_direct_source_with_source(self) -> None:
-        e = _make_evidence()
-        assert e.evidence_kind == EvidenceKind.DIRECT_SOURCE
-        assert e.source is not None
-
-    def test_direct_source_without_source_raises(self) -> None:
-        with pytest.raises(ValidationError, match="direct_source.*requires a source"):
-            EvidenceRecord(
-                claim="Test claim",
-                evidence_kind=EvidenceKind.DIRECT_SOURCE,
-            )
-
-    def test_model_generated_without_source_ok(self) -> None:
-        e = with_content_hash(
-            EvidenceRecord(
-                claim="LLM explanation",
-                evidence_kind=EvidenceKind.MODEL_GENERATED,
-            )
-        )
-        assert e.evidence_kind == EvidenceKind.MODEL_GENERATED
-        assert e.source is None
-
-    def test_default_verification_status(self) -> None:
-        e = _make_evidence()
-        assert e.verification_status == "unverified"
-
-
-# ---------------------------------------------------------------------------
 # Tests: check_misconception_objective_refs
 # ---------------------------------------------------------------------------
 
@@ -237,14 +193,6 @@ class TestCheckMisconceptionObjectiveRefs:
 
 
 class TestJsonRoundTrip:
-    def test_evidence_record_hash_stability(self) -> None:
-        e1 = _make_evidence()
-        h1 = compute_content_hash(e1)
-        data = e1.model_dump(mode="json")
-        e2 = EvidenceRecord.model_validate(data)
-        h2 = compute_content_hash(e2)
-        assert h1 == h2
-
     def test_lesson_hash_stability(self) -> None:
         objs = _make_objectives()
         l1 = _make_lesson(objs)
@@ -266,11 +214,8 @@ class TestFullContentPlan:
         lesson = _make_lesson(objs)
         we = _make_worked_example(lesson)
         m = _make_misconception(objs)
-        evidence = _make_evidence()
 
         # Cross-references are consistent
         assert we.lesson_id == lesson.id
         assert m.objective_ids[0] == objs[0].id
         assert lesson.objective_ids[0] == objs[0].id
-        assert evidence.evidence_kind == EvidenceKind.DIRECT_SOURCE
-        assert evidence.source is not None
