@@ -179,9 +179,11 @@ Each phase = its own TASK entry in `tasks.md`, with: implementation, regression 
 `pytest -q` + ruff, a mutation micro-harness where the fix is non-trivial, docs touch, commit
 + push. Marker for stepwise work; never stage `research/scoring.py`.
 
-- **Phase A — P0 correctness (next milestone):** items 1.1–1.5. Highest value: 1.1 (the
-  self-inflicted TASK-011 break) and 1.2 (silent guaranteed-failure path).
-- **Phase B — reproducibility (ADR-008/009):** items 2.1–2.2.
+- **Phase A — P0 correctness:** items 1.1–1.5. **DONE — TASK-012.**
+- **Phase B — reproducibility (ADR-008/009):** items 2.1–2.2. **DONE — TASK-013.**
+  (`source_id` is now `seeded_id(provider, url)` in every shipped adapter; stage
+  boundary normalises the rest, so identical responses → byte-identical runs.
+  Gate names now live in `lpf.orchestration.gates` and route through it.)
 - **Phase C — CLI hygiene:** items 3.1–3.5.
 - **Phase D — contract honesty:** items 4.*.
 - **Phase E — dead code removal (the coverage lever):** items 5.* scoped removals, then

@@ -17,6 +17,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 10 | 2026-10-11 | TASK-010 | Route Retrieval by Query Intent (per-question provider pruning keyed on intent) | Completed | `34e38d1` |
 | 11 | 2026-10-11 | TASK-011 | Expose Model Provider Selection in CLI and Config (`--model`, env, `lpf.toml`) | Completed | `419c3c4` |
 | 12 | 2026-10-11 | TASK-012 | Fix the Five Verified P0 Bugs from the Whole-Codebase Audit (provider kind mismatch, research-owned gate routing, terminal-state crash, ValueError escapes, decorative schema gate) | Completed | `67c9b1b`, `6a74519` |
+| 13 | 2026-10-11 | TASK-013 | Live-Run Determinism (seeded source ids, stage-boundary reproducibility) + Gate-Name Single Source of Truth (`orchestration/gates.py`) | Completed | `(pending)` |
 
 > **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
 > seam: `lpf generate --model openai-compatible|ollama` selects the writer
@@ -196,6 +197,19 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - **1.4 ValueError escapes**: content-stage structured-reply mismatch now raises `ProviderError(STRUCTURED_REPLY_REQUIRED)` and the deterministic mock's unknown-schema guard raises `WorkflowError(UNSUPPORTED_SCHEMA)`, both `LpfError`s, so the run loop returns a FAILED run instead of a traceback.
   - **1.5 decorative gate**: the always-passed `schema_validity` gate (qa_stage.py) and its `NON_REPAIRABLE_GATES` entry are gone; schema conformance is enforced by pydantic at construction. Tests assert no `schema_validity` in a run's gate list, and the packaging HTML fixture/assertion no longer cites it.
 - **Verification**:
-  - `python -m pytest tests/`: 889 passed (11 new, 0 regressions).
+  - `python -m pytest tests/`: 890 passed (11 new, 0 regressions).
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: all 161 files formatted.
   - Mutation-tested (5/5 killed, `%TEMP%\opencode\mutate_p0_fixes.py`): kind back to underscore, `factual_consistency` back to CONTENT_GATES, `state.fail` unconditional, bare `ValueError` in content stage, decorative gate re-added.
+
+### Iteration 13 — 2026-10-11: TASK-013
+- **Task**: Phase B of the audit plan — close the determinism workstream: live `source_id` was a uuid (`new_id()` in all four adapters), so two runs given identical provider responses still produced different report/evidence-map content hashes; and gate-name sets were duplicated string literals in `revision` with no cross-check against what `qa_stage` emits.
+- **Changes**:
+  - New `lpf.domain.identity.seeded_id(*parts)`: `sha256("|".join(parts))` truncated to 32 hex — deterministic, collision-resistant, order-sensitive. All four live adapters (`arxiv`, `wikimedia`, `tavily`, `searxng`) now stamp `source_id=seeded_id(provider, url)`; the offline mock keeps `ctx.id` and dedupe still keys on URL (`service.py:96`), so offline bytes are unchanged. `new_id()` stays only where genuine uniqueness is required (claim/research ids outside a run id, db rows).
+  - With seeded ids, the stage boundary needs no source-id rewrite: `_normalise_report` already normalises stage ids/timestamps, so `build_research` over any canned live provider producing the same responses twice is now fully deterministic (E2E test asserts report + evidence-map content hashes equal).
+  - New `src/lpf/orchestration/gates.py` — one constant per gate + `ALL_GATES` catalog. `revision.py` builds `CONTENT_GATES`/`ASSESSMENT_GATES`/`NON_REPAIRABLE_GATES` from the constants and `qa_stage.py` emits them via the constants (`name=OBJECTIVE_REFERENCES`, etc.), so a name cannot drift between emitter and owner. Both keep their docstrings' ownership reasoning (`factual_consistency` unowned, `schema_validity` absent).
+  - Tests: `TestSeededId` (+3) and a provider cross-contract test (same canned response twice → identical ids; every id == `seeded_id(provider, url)`); staged-live E2E determinism in `test_e2e_pipeline.py::TestDeterminism`; `TestRoutingTable` catalog==union + exactly-one-set checks and `TestGateCatalogSurface` runtime tests (default run emits every unconditional catalog gate; `required_gates=["objective_references"]` run emits the whole catalog) in `test_revision_loop.py`.
+- **Verification**:
+  - `python -m pytest tests/`: 902 passed (12 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 163 files formatted.
+  - Mutation-tested (5/5 killed, `%TEMP%\opencode\mutate_phase_b.py`): provider `source_id` back to uuid, `seeded_id` order-insensitive, a gate dropped from its ownership set, a dangling gate name added to `NON_REPAIRABLE_GATES`, `qa_stage` emitting a literal outside the catalog. (First run had two false lives/skips: the uuid-reordered mutation was idempotent and CRLF line endings broke two patterns — both harness artefacts, fixed.)
+  - Docs: ADR-009's "live runs are not byte-reproducible" limitation updated to state identical responses now yield byte-identical output; ADR-010 documents the gate catalog; `tasks.md` TASK-013 checked (Phase B section); `version_history.md` Current Status updated.

@@ -115,8 +115,11 @@ two independent halves; each test class member guards a different one.
   (ADR-007). They are correctly unsupported, but retrieving them was wasted
   effort. Routing questions to providers by intent is the clear next step.
 - **Live runs are not byte-reproducible.** They depend on network responses. The
-  reproducibility guarantee holds for identical provider responses, which is the
-  same property ADR-006 already claims for ranking.
+  reproducibility guarantee holds for identical provider responses — the same
+  property ADR-006 already claims for ranking — and TASK-013 tightened that:
+  `source_id` is now a seeded function of `(provider, url)` (no hidden uuid),
+  and the stage normalises ids/timestamps, so *identical* responses produce
+  *byte-identical* output. The remaining variance is the response content itself.
 - **Tavily remains unverified** (no API key) and **SearXNG requires self-hosting**.
 - **arXiv search is loose.** Plain keyword queries return tangential preprints;
   a field/category restriction is not yet applied.

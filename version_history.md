@@ -410,9 +410,17 @@ revision 0 instead of burning the budget on a rebuild its research-owned inputs
 can never clear; a packaging error after COMPLETE no longer crashes the run
 handler into a `WorkflowError`; structured-reply mismatches surface as typed
 failed runs instead of `ValueError` tracebacks; and the always-passed
-`schema_validity` gate is gone (pydantic enforces schemas at construction). The
-remaining workstreams from that audit — live-run reproducibility, CLI hygiene,
-contract-honesty knobs, and dead-code removal — are queued as TASK-013+.
+`schema_validity` gate is gone (pydantic enforces schemas at construction).
+
+**Live runs are now reproducible given identical responses (TASK-013).** The four
+live research adapters stamp `source_id` from a seeded hash of `(provider, url)`
+instead of a fresh uuid, so two runs fed the same provider responses produce the
+same report and evidence-map hashes — closing the last hidden nondeterminism
+behind the stage seam. QA gate names are also now a single source of truth
+(`lpf.orchestration.gates`): the revision-ownership sets and the QA stage both
+reference the same constants, and tests prove the emitted catalog equals the
+owned catalog. The remaining audit workstreams — CLI hygiene, contract-honesty
+knobs, and dead-code removal — are queued as TASK-014+.
 
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is

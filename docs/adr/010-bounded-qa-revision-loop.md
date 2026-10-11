@@ -56,6 +56,12 @@ stage, using an explicit ownership table (`OWNED_GATES`) rather than a guess:
   enforced by pydantic at construction, so a decorative always-passed gate was
   removed (the original one could never fail).
 
+Gate names live in `lpf.orchestration.gates` (TASK-013): one constant per gate,
+emitted by the QA stage and referenced from here, so a name cannot drift between
+what the stage emits and what the router owns. The catalog's equality with the
+union of the ownership sets is locked by a cross-check test in
+`tests/test_revision_loop.py`.
+
 Ownership is **partial**. One unowned gate in the failure set aborts the run,
 because no stage we are allowed to revisit can clear it. A mixed content +
 assessment failure revisits content, since content rebuilds forward into
