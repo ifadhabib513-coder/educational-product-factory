@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 
+from lpf.research.intent import classify_intent
 from lpf.research.providers.base import SearchProviderProto
+from lpf.research.routing import prune_providers
 from lpf.schemas.research import (
     ResearchQuestion,
     SearchProvider,
@@ -16,11 +18,20 @@ from lpf.schemas.research import (
 logger = logging.getLogger(__name__)
 
 
+def _max_results_for(strategy: SearchStrategy, provider: SearchProvider) -> int:
+    """Preserve a plan's per-provider result budget when rebuilding queries."""
+    for query in strategy.queries:
+        if query.provider is provider:
+            return query.max_results
+    return 10
+
+
 class ResearchRouter:
     """Routes research questions to appropriate search providers.
 
     Creates a SearchPlan for each question, then executes searches
-    across configured providers.
+    across configured providers. Each question's strategy is rebuilt so only
+    providers suitable for its intent are queried.
     """
 
     def __init__(
@@ -30,7 +41,14 @@ class ResearchRouter:
         self._providers = providers or {}
 
     def plan(self, question: ResearchQuestion) -> SearchStrategy:
-        """Create a search strategy for a research question."""
+        """Create a search strategy for a research question.
+
+        The strategy is rebuilt per question: providers are pruned to those
+        suitable for the question's intent (see :mod:`lpf.research.routing`),
+        and queries are regenerated for the surviving providers. A question
+        arriving with a pre-pruned strategy is a no-op, so plan artifacts and
+        plan-less execution agree on which providers ran.
+        """
         strategy = question.strategy
 
         # Ensure at least one provider is configured
@@ -38,13 +56,25 @@ class ResearchRouter:
         if not available:
             # Fall back to any available provider
             available = list(self._providers.keys())[:1]
-            strategy = SearchStrategy(
-                use_web=True,
-                providers=available,
-                queries=[SearchQuery(query=question.text, provider=p) for p in available],
-            )
 
-        return strategy
+        selected = prune_providers(classify_intent(question.text), available)
+        queries = [
+            SearchQuery(
+                query=question.text,
+                provider=provider,
+                max_results=_max_results_for(strategy, provider),
+            )
+            for provider in selected
+        ]
+
+        return SearchStrategy(
+            use_web=strategy.use_web,
+            use_academic=strategy.use_academic,
+            use_wikipedia=strategy.use_wikipedia,
+            use_official=strategy.use_official,
+            providers=list(selected),
+            queries=queries,
+        )
 
     async def execute(
         self,

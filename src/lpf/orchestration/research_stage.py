@@ -25,9 +25,11 @@ from dataclasses import dataclass
 from lpf.domain.identity import with_content_hash
 from lpf.orchestration.context import RunContext
 from lpf.research.audience import AudienceLevel
+from lpf.research.intent import classify_intent
 from lpf.research.pipeline import PipelineConfig, PipelineResult, ResearchPipeline
 from lpf.research.providers.base import SearchProviderProto
 from lpf.research.router import ResearchRouter
+from lpf.research.routing import prune_providers
 from lpf.research.service import ResearchService
 from lpf.schemas.research import (
     EvidenceMap,
@@ -104,20 +106,26 @@ def _build_plan(
     topic: str,
     provider_names: list[SearchProvider],
 ) -> ResearchPlan:
-    """Build a plan that queries every injected provider once per question."""
-    questions = [
-        ResearchQuestion(
-            question_id=ctx.id("rq"),
-            text=text,
-            topic=topic,
-            strategy=SearchStrategy(
-                use_web=True,
-                providers=list(provider_names),
-                queries=[SearchQuery(query=text, provider=name) for name in provider_names],
-            ),
+    """Build a plan that queries each injected provider once per question, pruned to
+    the providers suitable for that question's intent (see
+    :mod:`lpf.research.routing`). The plan artifact therefore records the same
+    providers the router executes, so a reader can trust it.
+    """
+    questions = []
+    for text in questions_text:
+        selected = prune_providers(classify_intent(text), provider_names)
+        questions.append(
+            ResearchQuestion(
+                question_id=ctx.id("rq"),
+                text=text,
+                topic=topic,
+                strategy=SearchStrategy(
+                    use_web=True,
+                    providers=list(selected),
+                    queries=[SearchQuery(query=text, provider=name) for name in selected],
+                ),
+            )
         )
-        for text in questions_text
-    ]
     return with_content_hash(
         ResearchPlan(
             id=ctx.id("research_plan"),

@@ -81,7 +81,7 @@ class TestInjection:
         assert {result.domain for result in bundle.results} == {"injected.example"}
         assert {result.provider for result in bundle.results} == {SearchProvider.WIKIMEDIA}
 
-    async def test_every_injected_provider_is_queried_per_question(self) -> None:
+    async def test_providers_are_pruned_to_the_question_intent(self) -> None:
         arxiv = FakeProvider(SearchProvider.ARXIV, "arxiv.example")
         wiki = FakeProvider(SearchProvider.WIKIMEDIA, "wiki.example")
         bundle = await _research(
@@ -89,13 +89,34 @@ class TestInjection:
             providers={SearchProvider.ARXIV: arxiv, SearchProvider.WIKIMEDIA: wiki},
         )
         assert len(bundle.plan.questions) == 2
-        for question in bundle.plan.questions:
-            assert {query.provider for query in question.strategy.queries} == {
-                SearchProvider.ARXIV,
-                SearchProvider.WIKIMEDIA,
-            }
-        assert len(arxiv.queries) == 2
+        definitional, general = bundle.plan.questions
+        assert {query.provider for query in definitional.strategy.queries} == {
+            SearchProvider.WIKIMEDIA
+        }
+        assert {query.provider for query in general.strategy.queries} == {
+            SearchProvider.ARXIV,
+            SearchProvider.WIKIMEDIA,
+        }
+        # arXiv only served the general question; the definitional one never hit it.
+        assert len(arxiv.queries) == 1
         assert len(wiki.queries) == 2
+
+    async def test_a_definitional_question_never_hits_arxiv(self) -> None:
+        arxiv = FakeProvider(SearchProvider.ARXIV, "arxiv.example")
+        wiki = FakeProvider(SearchProvider.WIKIMEDIA, "wiki.example")
+        bundle = await _research(
+            RunContext(run_id="def"),
+            providers={SearchProvider.ARXIV: arxiv, SearchProvider.WIKIMEDIA: wiki},
+        )
+        definitional, general = bundle.plan.questions
+        assert definitional.text == "What is linear algebra?"
+        assert {query.provider for query in definitional.strategy.queries} == {
+            SearchProvider.WIKIMEDIA
+        }
+        # arXiv is never asked for the definitional question itself; only the
+        # general question ("Who wrote the BLAS notes?") is routed to it.
+        assert len(arxiv.queries) == 1
+        assert arxiv.queries == ["Who wrote the BLAS notes?"]
 
     async def test_evidence_still_reaches_the_report(self) -> None:
         fake = FakeProvider(SearchProvider.ARXIV, "arxiv.example")
