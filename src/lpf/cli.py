@@ -9,7 +9,9 @@ import click
 
 from lpf import __version__
 from lpf.config import LpfConfig, load_config
+from lpf.errors import ConfigError
 from lpf.logging_setup import setup_logging
+from lpf.models.providers import create_live_model
 from lpf.orchestration.pipeline import FactoryPipeline
 from lpf.research.providers.arxiv import ArxivProvider
 from lpf.research.providers.wikimedia import WikimediaProvider
@@ -35,10 +37,14 @@ def main(ctx: click.Context) -> None:
 @click.option("--run-id", default="run", show_default=True, help="Run identifier")
 @click.option("--seed", default="default", show_default=True, help="Determinism seed")
 @click.option(
-    "--mock/--no-mock",
-    default=True,
-    show_default=True,
-    help="Run the deterministic offline pipeline (only mock is implemented).",
+    "--model",
+    "model_kind",
+    default=None,
+    type=click.Choice(["mock", "openai-compatible", "ollama"], case_sensitive=False),
+    help=(
+        "Writer model provider. Default: LPF_PROVIDER / lpf.toml [model].kind, "
+        "else 'mock' (deterministic, offline — the safe default)."
+    ),
 )
 @click.option(
     "--live-research",
@@ -54,16 +60,30 @@ def generate(
     level: str,
     run_id: str,
     seed: str,
-    mock: bool,
+    model_kind: str | None,
     live_research: bool,
 ) -> None:
     """Generate an educational product for a subject and topic."""
     config: LpfConfig = ctx.obj["config"]
+    kind = model_kind or config.provider
 
-    if not mock and config.provider != "mock":
-        raise click.ClickException(
-            f"Provider {config.provider!r} is not implemented yet; use --mock."
-        )
+    model = None
+    if kind == "mock":
+        writer = "mock (deterministic, offline)"
+    else:
+        try:
+            model = create_live_model(
+                kind.lower(),
+                model=config.model_name,
+                base_url=config.model_endpoint,
+                api_key=config.api_key,
+                timeout_seconds=config.timeout_seconds,
+            )
+        except ConfigError as exc:
+            raise click.ClickException(str(exc)) from exc
+        name = config.model_name or "default"
+        endpoint = config.model_endpoint or "default endpoint"
+        writer = f"{kind} ({name} @ {endpoint})"
 
     inputs = DiscoveryInputs(
         request=f"Generate a learning product on {topic} for {level} learners.",
@@ -80,6 +100,7 @@ def generate(
 
     click.echo(f"Generating product: subject={subject}, topic={topic}, level={level}")
     click.echo(f"Output directory: {config.output_dir}")
+    click.echo(f"Writer model: {writer}")
     click.echo(
         "Research providers: "
         + (
@@ -89,7 +110,11 @@ def generate(
         )
     )
 
-    pipeline = FactoryPipeline(output_dir=config.output_dir, research_providers=research_providers)
+    pipeline = FactoryPipeline(
+        output_dir=config.output_dir,
+        model=model,
+        research_providers=research_providers,
+    )
     result = asyncio.run(pipeline.run(inputs, run_id=run_id, seed=seed))
 
     if not result.succeeded:
