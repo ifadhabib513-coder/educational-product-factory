@@ -117,3 +117,23 @@
     - README documents providers, env vars, and the offline default.
     - CLI tests run offline with the mock provider; full pytest suite and ruff linters pass.
   - **Implementation notes**: `generate` drops the stale `--mock/--no-mock` guard (providers are implemented since TASK-007) for a `--model mock|openai-compatible|ollama` option. Resolution precedence: flag > `LPF_PROVIDER`/`lpf.toml [model].kind` > default `mock`. Non-mock kinds build the writer through `create_live_model` with `LPF_MODEL_NAME`/`LPF_MODEL_ENDPOINT`/`LPF_API_KEY`/`LPF_TIMEOUT`; an unknown kind (e.g. `LPF_PROVIDER=claude`) exits 1 with a readable `UNKNOWN_MODEL_KIND` message. `config.py` also reads an optional `lpf.toml` (`[model]` name/endpoint/api_key/kind, `[run]` log_level/output_dir/timeout) with env always winning; a missing or malformed file is a no-op. `--model mock` is byte-identical to the default run (test compares the full output trees). README gained the provider matrix and the offline-safe default. New `tests/test_config.py` (toml/env precedence, malformed/missing files, unknown keys) and `tests/test_cli.py` (flag advertised, flag-beats-env, config-provider fallback, env→endpoint/key wiring, readable unknown-kind failure, live model passed to the pipeline, byte-identical trees). Six-point mutation harness, 6/6 killed. Suite: 877 passed, ruff clean.
+
+---
+
+## v0.8.1 Milestone Tasks — Whole-Codebase Audit Fixes (Phase A: P0 correctness)
+
+> A whole-codebase audit (`docs/audits/codebase-gaps-and-bugs.md`) found five
+> verified P0 bugs and a long tail of P1/P2/P3 gaps. Phase A fixes the P0s; later
+> phases (TASK-013 onward) take the determinism, CLI-hygiene, contract, and
+> dead-code workstreams from the same plan.
+
+- [x] **TASK-012**: Fix the Five Verified P0 Bugs
+  - **Objective**: Close the audit's Phase A: (1) `openai-compatible` provider kind was unreachable via `--model`/`LPF_PROVIDER` (TASK-011 regression: class `kind="openai_compatible"` vs the hyphen the CLI/config/docs use); (2) `factual_consistency` was routed to a content rebuild whose inputs are research-owned → guaranteed 3 wasted revisions + FAIL; (3) the run-level `except LpfError` handler called `state.fail()` post-COMPLETE → `WorkflowError` crash instead of a failed result; (4) bare `ValueError`s escaped the run loop as tracebacks; (5) `schema_validity` was a decorative always-passed gate.
+  - **Acceptance Criteria**:
+    - `--model openai-compatible` / `LPF_PROVIDER=openai-compatible` resolves the real adapter via the real factory (not a monkeypatched one).
+    - A zero-supported-claims `factual_consistency` failure aborts the run at revision 0 instead of burning the budget.
+    - A packaging `LpfError` raised after COMPLETE yields a result (no `WorkflowError` escapes), with `package=None` and the failure recorded.
+    - Structured-reply mismatches surface as typed `ProviderError`/`WorkflowError` failed runs, never raw tracebacks.
+    - No `schema_validity` gate in a real run's verification.
+    - Full pytest suite and ruff linters pass; 5-point mutation harness killed 5/5.
+  - **Implementation notes**: `OpenAICompatibleModel.kind` becomes the canonical `"openai-compatible"` and `create_live_model` normalizes `_ → -` (case/whitespace-insensitive), so the documented spelling and the class never drift again; tests drive the real factory with the exact `--model`/env values. `factual_consistency` moves to `NON_REPAIRABLE_GATES` (ADR-010 updated) — the routing unit tests and the E2E ungrounded-evidence test now assert `revisions == 0`. The `except LpfError` handler guards `state.fail` with `is_terminal` (packaging runs post-COMPLETE; a terminal run records `failure_reason` instead of re-entering the machine). Content-stage schema mismatches raise `ProviderError(STRUCTURED_REPLY_REQUIRED)` and the deterministic mock raises `WorkflowError(UNSUPPORTED_SCHEMA)` for unknown schemas instead of `ValueError`. The always-passed `schema_validity` gate and its `NON_REPAIRABLE_GATES` entry are removed (pydantic enforces schemas at construction). New regression tests: real-factory kind resolution (incl. underscore alias, case-insensitivity), unowned `factual_consistency` routing, post-completion packaging failure, text-for-structured-call failed run, and no-decorative-gate assertion. Suite: 889 passed, ruff clean. Mutation harness `%TEMP%\opencode\mutate_p0_fixes.py`, 5/5 killed.

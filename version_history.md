@@ -401,6 +401,19 @@ precedence order. Offline `mock` stays the default safe path and produces
 byte-identical output — this completes the v0.8.0 milestone (live model seam →
 resilience → repair proof → intent-aware retrieval → CLI exposure).
 
+**The whole codebase was audited; the P0 bugs are fixed.** Since TASK-012,
+a full audit (`docs/audits/codebase-gaps-and-bugs.md`) catalogued and fixed the
+five verified P0 correctness defects: the `openai-compatible` provider kind is
+now reachable via `--model`/`LPF_PROVIDER` (a TASK-011 regression where the
+class kind and the CLI spelling disagreed); `factual_consistency` aborts runs at
+revision 0 instead of burning the budget on a rebuild its research-owned inputs
+can never clear; a packaging error after COMPLETE no longer crashes the run
+handler into a `WorkflowError`; structured-reply mismatches surface as typed
+failed runs instead of `ValueError` tracebacks; and the always-passed
+`schema_validity` gate is gone (pydantic enforces schemas at construction). The
+remaining workstreams from that audit — live-run reproducibility, CLI hygiene,
+contract-honesty knobs, and dead-code removal — are queued as TASK-013+.
+
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is
 real and selectable per run, but a polished live run still needs that writer

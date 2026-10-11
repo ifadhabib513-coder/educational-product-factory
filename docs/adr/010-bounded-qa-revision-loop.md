@@ -42,13 +42,19 @@ them would turn "bounded repair" into "re-run the factory".
 `lpf.orchestration.revision.route_failed_gates` maps a set of failed gates to a
 stage, using an explicit ownership table (`OWNED_GATES`) rather than a guess:
 
-- content-owned: `misconception_references`, `factual_consistency`,
-  `numerical_consistency`;
+- content-owned: `misconception_references`, `numerical_consistency`;
 - assessment-owned: `question_references`, `assessment_references`,
   `answer_references`, `answer_key_references`;
-- unowned: everything else, including `schema_validity`,
+- unowned: everything else, including `factual_consistency`,
   `curriculum_coverage`, `objective_references`, `research_evidence`,
   `required_gates_present`, and any gate name nobody has claimed.
+  `factual_consistency` is unowned because its inputs (`evidence_map.claims`,
+  `verified_source_ids`) are research artifacts the revision cycle never
+  revisits — a content rebuild cannot clear it, so for a zero-supported-claims
+  failure the run aborts immediately instead of burning the revision budget.
+  `schema_validity` is not listed as a gate at all: schema conformance is
+  enforced by pydantic at construction, so a decorative always-passed gate was
+  removed (the original one could never fail).
 
 Ownership is **partial**. One unowned gate in the failure set aborts the run,
 because no stage we are allowed to revisit can clear it. A mixed content +

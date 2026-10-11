@@ -16,6 +16,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 9 | 2026-10-11 | TASK-009 | Revision Loop Repairs a Model-Written Worked-Example Defect (model-written worked examples, QA feedback threaded into rebuilds) | Completed | `56aac58` |
 | 10 | 2026-10-11 | TASK-010 | Route Retrieval by Query Intent (per-question provider pruning keyed on intent) | Completed | `34e38d1` |
 | 11 | 2026-10-11 | TASK-011 | Expose Model Provider Selection in CLI and Config (`--model`, env, `lpf.toml`) | Completed | `419c3c4` |
+| 12 | 2026-10-11 | TASK-012 | Fix the Five Verified P0 Bugs from the Whole-Codebase Audit (provider kind mismatch, research-owned gate routing, terminal-state crash, ValueError escapes, decorative schema gate) | Completed | `(pending)` |
 
 > **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
 > seam: `lpf generate --model openai-compatible|ollama` selects the writer
@@ -184,3 +185,17 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m pytest tests/`: 877 passed (15 new, 0 regressions) — `tests/test_config.py` (toml/env precedence, malformed/missing files, unknown keys) and `tests/test_cli.py` (flag advertised, flag-beats-env, config-provider fallback, env→endpoint/key wiring into `create_live_model`, readable unknown-kind failure, live model passed to `FactoryPipeline`, and `--model mock` byte-identical to the default run tree).
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 161 files already formatted.
   - Mutation-tested (6/6 caught): CLI flag ignored, mock entering the live branch, live-provider config (endpoint/key/name) dropped, live model not passed to the pipeline, toml overriding env, config dropping the model fields.
+
+### Iteration 12 — 2026-10-11: TASK-012
+- **Task**: Fix the five verified P0 bugs from the whole-codebase audit (`docs/audits/codebase-gaps-and-bugs.md`, Phase A).
+- **Rationale**: The audit (coverage run + four exploration sweeps + direct read-verification of every finding) surfaced correctness bugs that produce wrong output or break a documented live path — including one introduced by TASK-011.
+- **Changes**:
+  - **1.1 provider-kind mismatch (TASK-011 regression)**: `OpenAICompatibleModel.kind` is now the canonical `"openai-compatible"` (matching `--model`, `LPF_PROVIDER`, `lpf.toml`, README) and `create_live_model` normalizes `_ → -` with case/whitespace folding, so `--model openai-compatible` resolves the real adapter instead of `UNKNOWN_MODEL_KIND`. Tests now drive the **real** factory with the exact CLI/env values (hyphen, underscore alias, `OLLAMA`/` oLLaMa`).
+  - **1.2 research-owned gate routing**: `factual_consistency` moves to `NON_REPAIRABLE_GATES` — its inputs (`evidence_map.claims`, `verified_source_ids`) are research artifacts the revision cycle never revisits, so a zero-supported-claims failure used to burn all 3 revisions and then fail. The run now aborts at revision 0 (`test_ungrounded_evidence...` asserts `revisions == 0`). ADR-010 section 2 updated.
+  - **1.3 terminal-state crash**: the `except LpfError` handler guarded `state.fail` with `is_terminal`. Packaging runs after COMPLETE, so a post-completion `LpfError` previously triggered `advance(FAILED)` → `WorkflowError` crash; it now records `failure_reason`, keeps the terminal state, and returns `package=None`. Regression: forced `package_run` `RenderingError` → no crash, failure recorded, last event still `run_completed`.
+  - **1.4 ValueError escapes**: content-stage structured-reply mismatch now raises `ProviderError(STRUCTURED_REPLY_REQUIRED)` and the deterministic mock's unknown-schema guard raises `WorkflowError(UNSUPPORTED_SCHEMA)`, both `LpfError`s, so the run loop returns a FAILED run instead of a traceback.
+  - **1.5 decorative gate**: the always-passed `schema_validity` gate (qa_stage.py) and its `NON_REPAIRABLE_GATES` entry are gone; schema conformance is enforced by pydantic at construction. Tests assert no `schema_validity` in a run's gate list, and the packaging HTML fixture/assertion no longer cites it.
+- **Verification**:
+  - `python -m pytest tests/`: 889 passed (11 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: all 161 files formatted.
+  - Mutation-tested (5/5 killed, `%TEMP%\opencode\mutate_p0_fixes.py`): kind back to underscore, `factual_consistency` back to CONTENT_GATES, `state.fail` unconditional, bare `ValueError` in content stage, decorative gate re-added.
