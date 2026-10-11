@@ -18,6 +18,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 11 | 2026-10-11 | TASK-011 | Expose Model Provider Selection in CLI and Config (`--model`, env, `lpf.toml`) | Completed | `419c3c4` |
 | 12 | 2026-10-11 | TASK-012 | Fix the Five Verified P0 Bugs from the Whole-Codebase Audit (provider kind mismatch, research-owned gate routing, terminal-state crash, ValueError escapes, decorative schema gate) | Completed | `67c9b1b`, `6a74519` |
 | 13 | 2026-10-11 | TASK-013 | Live-Run Determinism (seeded source ids, stage-boundary reproducibility) + Gate-Name Single Source of Truth (`orchestration/gates.py`) | Completed | `d48d391`, `3b36e0a` |
+| 14 | 2026-10-11 | TASK-014 | CLI/Config Hygiene (tolerant `LPF_TIMEOUT` parse, `run_id` traversal guard, HTTP client lifecycle via `aclose()`, configured research timeout, honest bundle claim) | Completed | `e34bb6c`, `ee4dcb2` |
 
 > **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
 > seam: `lpf generate --model openai-compatible|ollama` selects the writer
@@ -213,3 +214,18 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 163 files formatted.
   - Mutation-tested (5/5 killed, `%TEMP%\opencode\mutate_phase_b.py`): provider `source_id` back to uuid, `seeded_id` order-insensitive, a gate dropped from its ownership set, a dangling gate name added to `NON_REPAIRABLE_GATES`, `qa_stage` emitting a literal outside the catalog. (First run had two false lives/skips: the uuid-reordered mutation was idempotent and CRLF line endings broke two patterns — both harness artefacts, fixed.)
   - Docs: ADR-009's "live runs are not byte-reproducible" limitation updated to state identical responses now yield byte-identical output; ADR-010 documents the gate catalog; `tasks.md` TASK-013 checked (Phase B section); `version_history.md` Current Status updated.
+
+### Iteration 14 — 2026-10-11: TASK-014
+- **Task**: Phase C of the audit plan — CLI/config hygiene (audit items 3.1–3.5): a non-integer `LPF_TIMEOUT` crashed startup with a bare `ValueError`; `--run-id` flowed unchecked into directory/archive/file names (path traversal); live `httpx.AsyncClient`s were never closed; research providers ignored the configured timeout (hardcoded 20s); and the ZIP bundle docstring overclaimed cross-platform byte-identity.
+- **Changes**:
+  - **3.1 timeout parse**: new `config._parse_timeout` uses `float()` with a positivity/finiteness guard and `max(1, round(...))`, raising `ConfigError(code="INVALID_TIMEOUT")` for non-numeric/non-positive/non-finite values; `main()` wraps `load_config` so a bad env/TOML becomes a `ClickException`, never a traceback.
+  - **3.2 run-id safety**: new `orchestration.context.validate_run_id` (`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`) rejects separators, leading dots, empty and >64-char ids with `ConfigError(code="INVALID_RUN_ID")`; called at the top of `FactoryPipeline.run` so programmatic callers are covered too, and the CLI maps the error to a `ClickException`.
+  - **3.3 client lifecycle**: `HttpTransport.aclose()`; the four live providers and `HttpChatModel` track `_owns_transport`/`_owns_client` and close only what they created; new `FactoryPipeline.aclose()` closes the model then the research providers; the CLI runs the pipeline in `try/finally` so clients are released even when a run fails.
+  - **3.4 timeout threading**: provider constructors take keyword-only `timeout_seconds` forwarded to `build_client`; the CLI passes `config.timeout_seconds`.
+  - **3.5 honest bundle claim**: `bundle.py`'s docstring scopes byte-identity to a given zlib build; a test asserts the pinned per-entry metadata (fixed DOS epoch, `create_system=3`, `mode 0o644`, deflate).
+  - Tests: `TestTimeoutParsing` (config), `TestCliInputHygiene` (CLI), `TestRunIdValidation` (pipeline boundary), `TestConfiguredTimeout` + `TestProviderClientLifecycle` (providers), `TestClientLifecycle` (model/pipeline aclose), and the bundle metadata test.
+- **Verification**:
+  - `python -m pytest tests/`: 953 passed (51 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 163 files formatted.
+  - Mutation-tested (8/8 killed, `%TEMP%\opencode\mutate_phase_c.py`): drop the timeout positive/finite guard, truncate instead of round, run-id regex allows separators, remove the pipeline `validate_run_id` call, model closes an injected client, provider closes an injected transport, arxiv ignores the configured timeout, unpin the zip timestamp.
+  - Docs: audit Phase C marked DONE; `tasks.md` TASK-014 checked (Phase C section); `version_history.md` Current Status updated.
