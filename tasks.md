@@ -215,3 +215,47 @@
     - Full pytest suite (881 passed) and ruff linters pass; mutation harness killed 4/4.
   - **Implementation notes**: `research/service.py` reduced to the async `execute_plan_questions` entry point (dead `_deduplicate` and 7 public methods removed); `authority.py`/`tavily.py` docstrings de-reference the removed methods. Deleted packages/modules as above plus `tests/test_crew_discovery.py`, `tests/test_discovery_validation.py`, `tests/test_schemas_contract.py`; `tests/test_research.py`, `tests/test_models.py`, `tests/test_domain_content.py` trimmed to match. `discovery_stage.py` docstring no longer points at `lpf.crews.discovery`. `pyproject.toml` gains `--cov=lpf --cov-report=term-missing --cov-fail-under=97` in `addopts` and a `[tool.coverage.report]` exclusion for the `__main__` guard. New `tests/test_cli.py::TestCliReporting` covers the failed-run report and the live-research provider wiring (raises `cli.py` to 99%). Suite: 881 passed, total coverage 97.81%, ruff clean, format 127 files. Mutation harness `%TEMP%\opencode\mutate_phase_e.py`, 4/4 killed.
 
+---
+
+## v0.8.1 Milestone Tasks — Whole-Codebase Audit Fixes (Phase F: milestone close)
+
+> Every phase of the whole-codebase audit remediation plan (A–E, TASK-012–016) is
+> done and pushed. Phase F is the close-out: align the docs with what shipped,
+> mark the v0.8.1 milestone complete, and open the next milestone.
+
+- [x] **TASK-017**: Milestone Close (ROADMAP/version_history alignment, v0.8.1 complete, open v0.9.0)
+  - **Objective**: (1) record the enforced 97% coverage floor and current suite size in ROADMAP Phase 26; (2) declare the v0.8.1 audit milestone complete in `tasks.md` and `version_history.md`, framing the remaining product gap honestly; (3) open the next milestone section so new tasks land in v0.9.0, not the closed one; (4) mark the audit plan's Phase F DONE.
+  - **Acceptance Criteria**:
+    - `docs/ROADMAP.md` Phase 26 states the coverage floor and suite size; no audit item line it supersedes contradicts it.
+    - `docs/audits/codebase-gaps-and-bugs.md` marks Phase F DONE — TASK-017 and lists TASK-017 in §8.
+    - `tasks.md` has a checked TASK-017 under a Phase F section, a v0.8.1 milestone-complete note, and a `## v0.9.0 Milestone Tasks` section that new tasks will extend.
+    - `version_history.md` Current Status closes v0.8.1 (all five audit phases described) and states the v0.9.0 goal; the suite-size line matches PROGRESS.
+    - `PROGRESS.md` gains an Iteration 17 row + section; no code changes and no test-count changes.
+  - **Implementation notes**: docs-only task. ROADMAP Phase 26 "Testing Strategy" status line updated to "881 tests passing, enforced 97% coverage floor — `--cov-fail-under=97`" with a new Coverage floor bullet. Audit §7 Phase F annotated DONE — TASK-017 (full plan now complete) and §8 extended with TASK-017. `tasks.md` closes v0.8.1 with a milestone-complete blockquote and opens v0.9.0 — Real Prose End to End, motivated by the honest remaining gap (the writing is still `DeterministicMockModel` text; a polished live run needs a real writer pointed through the TASK-007+ seam). `version_history.md` Current Status closes v0.8.1 and names the v0.9.0 goal. No source/tests touched; suite remains 881 passing with the 97.81% cover.
+
+---
+
+> **v0.8.1 milestone complete.** The whole-codebase audit remediation plan is done:
+> TASK-012 fixed the five verified P0s (canonical provider kind, research-owned gate
+> routing, terminal-state crash, `ValueError` escapes, decorative schema gate);
+> TASK-013 made live runs reproducible given identical provider responses and gave
+> gate names a single source of truth; TASK-014 hardened the operator edges (timeout
+> parsing, run-id safety, HTTP client lifecycle, configured research timeout, honest
+> bundle claim); TASK-015 made the spec's quality knobs real or gone; TASK-016 removed
+> the dead scaffolding and made total coverage an enforced ≥97% gate; TASK-017 closed
+> the milestone out. The product is verified, deterministic, repairable, and honest —
+> and the writer is the last major fiction (see the v0.9.0 section below).
+
+---
+
+## v0.9.0 Milestone Tasks — Real Prose End to End
+
+> Motivation (from `version_history.md`): "the writing is the last major fiction."
+> The evidence is real (`--live-research`), the model seam is real and selectable
+> per run (`--model mock|openai-compatible|ollama`), the revision loop holds with a
+> model, and the audit proved the factory is contract-honest and dead-code-free. What
+> still does not exist is a polished live run: the offline default writes
+> `DeterministicMockModel` prose, and a real writer needs a real model pointed through
+> the TASK-007+ seam, with structured-output validation already in place. New tasks go
+> to this section only, never the completed milestones above.
+

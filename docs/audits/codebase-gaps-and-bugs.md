@@ -217,6 +217,10 @@ Each phase = its own TASK entry in `tasks.md`, with: implementation, regression 
   extras left `pyproject.toml`. Suite 881 passing; total coverage
   97.81% with a `--cov-fail-under=97` gate now in `[tool.pytest.ini_options]`.)
 - **Phase F — docs + milestone:** ROADMAP/version_history update, milestone bump.
+  **DONE — TASK-017.** (The v0.8.1 audit milestone is closed: ROADMAP Phase 26 now
+  records the enforced 97% coverage floor, `tasks.md` marks the milestone complete and
+  opens v0.9.0 ("real prose end to end"), and `version_history.md` Current Status
+  declares v0.8.1 done. The audit's remediation plan as a whole is complete.)
 
 ## 8. Proposed task tracking
 
@@ -225,3 +229,4 @@ Each phase = its own TASK entry in `tasks.md`, with: implementation, regression 
 - TASK-014 — Phase C (CLI/config hygiene)
 - TASK-015 — Phase D (contract knobs are real or gone)
 - TASK-016 — Phase E (dead code removal + coverage gate)
+- TASK-017 — Phase F (milestone close: ROADMAP/version_history update)

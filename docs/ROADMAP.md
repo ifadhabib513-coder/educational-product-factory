@@ -504,7 +504,7 @@ ai-product-factory/
 
 ## Phase 26 — Testing Strategy
 
-**Status: PARTIAL** (681 tests passing, 96% coverage)
+**Status: PARTIAL** (881 tests passing, **enforced** 97% coverage floor — `--cov-fail-under=97`)
 
 - End-to-end offline pipeline tests — COMPLETE (stage machine, packaging, byte-identical determinism)
 - Failure-path tests — COMPLETE (QA failure aborts before packaging; domain errors returned as values; unexpected errors propagate)
@@ -516,6 +516,7 @@ ai-product-factory/
 - Audience fit threaded from `LearnerProfile.level` — COMPLETE
 - Corpus-relative freshness — COMPLETE (`published_at` still arXiv/Tavily only)
 - Benchmark: Beginner Definition Retrieval — COMPLETE (mutation-verified)
+- Coverage floor — COMPLETE (total coverage is an enforced gate since TASK-016; dead scaffolding and unwired modules were removed rather than patched)
 
 - Layer 1: Unit tests (validators, schemas, parsers, calculators, renderers)
 - Layer 2: Integration tests (Research → Curriculum → Content → QA → Revision)

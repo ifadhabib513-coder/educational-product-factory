@@ -261,3 +261,14 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 127 files formatted.
   - Mutation-tested (4/4 killed, `%TEMP%\opencode\mutate_phase_e.py`): failed run exits zero, failed-run message drops the stage, live-research wires arXiv twice, a deleted module (`domain.evidence`) is re-imported.
   - Docs: audit Phase E marked DONE and coverage table updated; `tasks.md` TASK-016 checked (Phase E section); `version_history.md` Current Status updated.
+
+### Iteration 17 — 2026-10-11: TASK-017
+- **Task**: Phase F of the audit plan — milestone close: align the docs with what shipped, mark the v0.8.1 audit milestone complete, and open the v0.9.0 milestone.
+- **Changes** (docs-only):
+  - **F1 ROADMAP**: Phase 26 "Testing Strategy" status line now reads "881 tests passing, enforced 97% coverage floor — `--cov-fail-under=97`" with a new Coverage-floor bullet (no longer the stale "681 tests, 96%").
+  - **F2 audit plan**: `docs/audits/codebase-gaps-and-bugs.md` §7 Phase F annotated DONE — TASK-017 (the remediation plan is complete) and §8 extended with TASK-017.
+  - **F3 tasks.md**: new Phase F section with checked TASK-017; v0.8.1 milestone-complete blockquote; `## v0.9.0 Milestone Tasks — Real Prose End to End` section opened with motivation, so future tasks land there.
+  - **F4 version_history**: Current Status closes v0.8.1 (all five audit phases) and names the v0.9.0 goal (real writer through the existing seam) as the honest next frontier.
+- **Verification**:
+  - No source/tests touched; suite remains 881 passing, total coverage 97.81%, gate enforced. ruff clean.
+  - Docs: audit plan fully DONE; `tasks.md` v0.8.1 milestone complete + v0.9.0 opened; `version_history.md` Current Status updated.

@@ -453,8 +453,20 @@ and no `__all__` advertises a name that is not used. The payoff is a clean, hone
 coverage floor: `pytest` now fails below **97%** (`--cov-fail-under`), running at
 97.81% over 881 passing tests.
 
+**v0.8.1 is complete — the audit remediation plan shipped.** Every phase (TASK-012
+through TASK-016, closed out by TASK-017) is done and pushed: the five verified P0
+defects are fixed, live runs are reproducible given identical provider responses,
+the operator edges are hardened, the spec's quality knobs are real or gone, and the
+dead scaffolding is removed with total coverage enforced at **≥97%** via
+`--cov-fail-under`. The factory is now verified, deterministic, repairable, and
+contract-honest — the whole-codebase audit
+(`docs/audits/codebase-gaps-and-bugs.md`) is closed out as DONE.
+
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is
 real and selectable per run, but a polished live run still needs that writer
 pointed at a real model. Output is Markdown/JSON/HTML
-rather than a rendered book.
+rather than a rendered book. That is the honest state of the wire and the goal of
+the next milestone: **v0.9.0 — Real Prose End to End** (point the TASK-007+ writer
+seam at the structured-output path and take the offline default from mock prose to
+a real, validated writer).
