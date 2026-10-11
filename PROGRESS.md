@@ -229,3 +229,18 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 163 files formatted.
   - Mutation-tested (8/8 killed, `%TEMP%\opencode\mutate_phase_c.py`): drop the timeout positive/finite guard, truncate instead of round, run-id regex allows separators, remove the pipeline `validate_run_id` call, model closes an injected client, provider closes an injected transport, arxiv ignores the configured timeout, unpin the zip timestamp.
   - Docs: audit Phase C marked DONE; `tasks.md` TASK-014 checked (Phase C section); `version_history.md` Current Status updated.
+
+### Iteration 15 — 2026-10-11: TASK-015
+- **Task**: Phase D of the audit plan — contract honesty (audit item 4.*): four `ProductSpec` fields looked load-bearing but did nothing (`QualitySpec.minimum_score`, `quality.required_gates`, the `seed` parameter, and `research_evidence`'s WARN-only gate), plus a wrong `date_span` annotation and an undocumented `overall_status` rollup.
+- **Changes**:
+  - **D1 minimum_score**: new `orchestration.gates.MINIMUM_SCORE` (added to `ALL_GATES` and `NON_REPAIRABLE_GATES`); `qa_stage._minimum_score_gate` fails a run whose gate pass-rate is below the spec's floor; `build_qa` takes `minimum_score` and `pipeline.run` passes `spec.spec.quality.minimum_score`.
+  - **D2 required_gates**: `pipeline.run` merges its `required_gates` argument with `spec.spec.quality.required_gates` and threads the result into `build_qa`; `discovery_stage` drops the phantom default `required_gates=["schema_validity"]`.
+  - **D3 dead seed**: removed `seed` from `RunContext`, the packaging manifest, the CLI (`--seed`), `pipeline.run`, and all call sites.
+  - **D4 date_span/overall_status**: `research.scoring.date_span`/`freshness` now use POSIX floats (`.timestamp()`); `_overall_status` documents that only `FAILED`/`WARNING` roll up.
+  - **D5 evidence_required**: `qa_stage._evidence_gate` takes `required`; `ConstraintsSpec.evidence_required=True` makes zero supported claims FAIL `research_evidence`, `False` makes it only a WARNING; `pipeline.run` passes the flag.
+  - Tests: new `tests/test_quality_contract.py` (`TestMinimumScore`, `TestSpecRequiredGates`, `TestEvidenceRequired`), `TestCliInputHygiene::test_no_seed_option_is_advertised`, `TestRunContext::test_the_dead_seed_field_is_gone`, updated `TestFreshness`.
+- **Verification**:
+  - `python -m pytest tests/`: 965 passed (12 net new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 164 files formatted.
+  - Mutation-tested (8/8 killed, `%TEMP%\opencode\mutate_phase_d.py`): pipeline stops enforcing minimum_score, stops threading evidence_required, ignores spec required_gates, inverts the minimum_score comparison, evidence gate ignores evidence_required, evidence gate never notices zero support, MINIMUM_SCORE dropped from the catalog, MINIMUM_SCORE left out of the ownership sets.
+  - Docs: audit Phase D marked DONE; `tasks.md` TASK-015 checked (Phase D section); `version_history.md` Current Status updated.

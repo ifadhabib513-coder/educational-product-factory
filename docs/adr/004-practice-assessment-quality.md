@@ -56,6 +56,15 @@ Three StrEnum value objects define the practice domain:
 - `ConstraintsSpec`: evidence/citation requirements, calculator allowance, exam alignment, max pages
 - `QualitySpec`: minimum score, required gates list
 
+These quality fields are not decorative: the QA stage reads them from the built
+`ProductSpec` (TASK-015). `quality.minimum_score` becomes an enforced
+`minimum_score` gate that fails a run whose gate pass-rate falls below the floor;
+`quality.required_gates` is merged with any run-level `required_gates` and checked
+by `required_gates_present`; and `constraints.evidence_required` decides whether a
+run with zero supported claims fails (`True`, the default) or merely warns
+(`False`). `check_quality_gate_references` remains the schema-level guard that a
+declared required gate is at least a known gate.
+
 `ProductDefinition` is preserved for backward compatibility with Stage 2a tests and existing code.
 
 ### 9. ProductType as a 14-value taxonomy

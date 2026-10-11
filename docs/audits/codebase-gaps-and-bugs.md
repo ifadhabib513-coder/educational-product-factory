@@ -189,7 +189,13 @@ Each phase = its own TASK entry in `tasks.md`, with: implementation, regression 
   boundary; owned HTTP clients are closed via `aclose()`; providers take the
   configured timeout; the bundle's byte-identity claim is scoped to a zlib build
   and pinned by a metadata test.)
-- **Phase D — contract honesty:** items 4.*.
+- **Phase D — contract honesty:** items 4.*. **DONE — TASK-015.**
+  (`QualitySpec.minimum_score` and `required_gates` are now enforced by the QA stage
+  via a new `minimum_score` gate and the `required_gates_present` check; the stale
+  `schema_validity` default was removed; the dead `seed` knob (CLI/`RunContext`/manifest)
+  was deleted; `date_span` returns POSIX floats; `overall_status` documents that
+  `SKIPPED`/`NOT_APPLICABLE` do not roll up; `ConstraintsSpec.evidence_required` now
+  makes a zero-evidence run fail or merely warn.)
 - **Phase E — dead code removal (the coverage lever):** items 5.* scoped removals, then
   re-run coverage and record new numbers.
 - **Phase F — docs + milestone:** ROADMAP/version_history update, coverage gate, milestone

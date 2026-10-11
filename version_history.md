@@ -429,8 +429,19 @@ model and live research providers) are released after every run, success or
 failure, while injected clients are left open; live research providers honour the
 configured timeout instead of a hardcoded one; and the ZIP bundle's claim is
 scoped to what it can actually guarantee (fixed per-entry metadata, byte-identity
-for a given zlib build). The remaining audit workstreams — contract-honesty
-knobs and dead-code removal — are queued as TASK-015+.
+for a given zlib build).
+
+**The spec's quality knobs are now real, or gone (TASK-015).** The audit found
+contract-honesty gaps: `QualitySpec.minimum_score` and `quality.required_gates`
+looked load-bearing but were never enforced, the `seed` parameter did nothing,
+and `research_evidence` could only warn. Now the QA stage enforces the declared
+floor with a new `minimum_score` gate (a sub-floor run fails rather than shipping),
+honours a spec's `required_gates`, and lets `ConstraintsSpec.evidence_required`
+decide whether a zero-evidence run fails or merely warns. The no-op `seed` knob
+was deleted from the CLI, `RunContext`, and the manifest; the stale
+`schema_validity` default is gone; `date_span` returns POSIX floats; and the
+`overall_status` rollup rule is documented. The remaining audit workstream is
+dead-code removal and the coverage gate (TASK-016).
 
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is

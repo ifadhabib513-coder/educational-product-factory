@@ -179,3 +179,22 @@
     - Full pytest suite and ruff linters pass; 8-point mutation harness killed 8/8.
   - **Implementation notes**: `config._parse_timeout` uses `float()` with a positivity/finiteness guard and `max(1, round(...))`, raising `ConfigError`; `main()` wraps `load_config` so a bad env/TOML is a `ClickException`. New `orchestration.context.validate_run_id` (`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`) is called at the top of `FactoryPipeline.run`, so programmatic callers are covered; the CLI maps the resulting `ConfigError` to a `ClickException`. `HttpTransport.aclose()` plus `_owns_transport`/`_owns_client` flags make providers (`arxiv`, `wikimedia`, `tavily`, `searxng`), `HttpChatModel`, and `FactoryPipeline.aclose()` close only what they created; the CLI runs the pipeline in `try/finally`. Provider constructors take keyword-only `timeout_seconds` forwarded to `build_client`, wired from `config.timeout_seconds` in the CLI. `bundle.py`'s claim is scoped to a given zlib implementation, backed by a metadata-pinning test. Tests: `TestTimeoutParsing`, `TestCliInputHygiene`, `TestRunIdValidation`, `TestConfiguredTimeout`, `TestProviderClientLifecycle`, `TestClientLifecycle`, and the bundle metadata test. Suite: 953 passed, ruff clean. Mutation harness `%TEMP%\opencode\mutate_phase_c.py`, 8/8 killed.
 
+## v0.8.1 Milestone Tasks — Whole-Codebase Audit Fixes (Phase D: contract honesty)
+
+> Phase D makes the spec's declared quality knobs real or removes them. The audit
+> found four fields that looked load-bearing but did nothing: `QualitySpec.minimum_score`
+> and `required_gates` were never enforced, the `seed` parameter was a no-op, and
+> `research_evidence` could only ever WARN so a zero-evidence run still passed. It also
+> found a wrong `date_span` annotation and an undocumented `overall_status` rollup rule.
+
+- [x] **TASK-015**: Contract Honesty (enforced minimum_score/required_gates, remove dead seed, evidence_required, date_span)
+  - **Objective**: (1) enforce `QualitySpec.minimum_score` and `quality.required_gates` in the QA stage instead of leaving them dead; (2) delete the no-op `seed` knob entirely (CLI, `RunContext`, manifest, tests); (3) make `ConstraintsSpec.evidence_required` decide whether a zero-evidence run fails or warns; (4) correct the `date_span` annotation (return POSIX floats, not datetimes) and document the `overall_status` rollup.
+  - **Acceptance Criteria**:
+    - A run whose gate pass-rate is below `quality.minimum_score` fails QA with a `minimum_score` gate; a run at or above it passes; a default run scores 1.0.
+    - `quality.required_gates` declared in the spec (not just the run argument) is enforced via `required_gates_present`; the stale `schema_validity` default is gone so a default run declares no gate.
+    - `ConstraintsSpec.evidence_required=True` (default) makes zero supported claims FAIL `research_evidence`; when `False` the same run is only a WARNING and still completes.
+    - `seed` no longer exists on `RunContext`, the CLI, or the manifest; the manifest is otherwise byte-identical.
+    - `research.scoring.date_span` returns POSIX floats and `freshness` consumes them directly; `_overall_status` documents that only `FAILED`/`WARNING` roll up.
+    - Full pytest suite and ruff linters pass; 8-point mutation harness killed 8/8.
+  - **Implementation notes**: new `MINIMUM_SCORE` gate name in `orchestration.gates`, added to `ALL_GATES` and to `NON_REPAIRABLE_GATES` in `revision.py` (routed nowhere, so a sub-floor run fails immediately). `qa_stage._evidence_gate` takes `required`; `qa_stage._minimum_score_gate` computes passed/total over the gates built so far; `build_qa` takes `minimum_score`/`evidence_required` and dedupes/sorts `required_gates`. `pipeline.run` merges the run argument with `spec.spec.quality.required_gates` and passes `spec.spec.quality.minimum_score` + `spec.spec.constraints.evidence_required`. `discovery_stage` drops the phantom `required_gates=["schema_validity"]`. `seed` removed from `context.RunContext`, `packaging_stage` manifest, `cli.py`, and all call sites; `scoring.date_span`/`freshness` use `.timestamp()`. Tests: `tests/test_quality_contract.py` (`TestMinimumScore`, `TestSpecRequiredGates`, `TestEvidenceRequired`), `TestCliInputHygiene::test_no_seed_option_is_advertised`, `TestRunContext::test_the_dead_seed_field_is_gone`, and the updated `TestFreshness`. Suite: 965 passed, ruff clean, format 164 files. Mutation harness `%TEMP%\opencode\mutate_phase_d.py`, 8/8 killed.
+

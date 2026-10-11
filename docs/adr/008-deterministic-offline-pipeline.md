@@ -57,7 +57,11 @@ makes a run irreproducible. Every stage therefore builds artifacts through
   call. Monotonic, so `created_at` ordering matches build order.
 
 The alternative — seeding a global RNG — was rejected because timestamps still
-come from the wall clock; you cannot seed `datetime.now()`.
+come from the wall clock; you cannot seed `datetime.now()`. For the same reason
+`RunContext` carries no `seed` (a `seed` field once existed but influenced
+nothing and was removed in TASK-015): determinism here comes from the fixed epoch
+and per-kind counters, not a random stream, so there is nothing for a seed to
+control.
 
 ### 3. The event log is the run's audit trail
 

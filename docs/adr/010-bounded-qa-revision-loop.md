@@ -47,11 +47,14 @@ stage, using an explicit ownership table (`OWNED_GATES`) rather than a guess:
   `answer_references`, `answer_key_references`;
 - unowned: everything else, including `factual_consistency`,
   `curriculum_coverage`, `objective_references`, `research_evidence`,
-  `required_gates_present`, and any gate name nobody has claimed.
+  `required_gates_present`, `minimum_score`, and any gate name nobody has claimed.
   `factual_consistency` is unowned because its inputs (`evidence_map.claims`,
   `verified_source_ids`) are research artifacts the revision cycle never
   revisits — a content rebuild cannot clear it, so for a zero-supported-claims
   failure the run aborts immediately instead of burning the revision budget.
+  `minimum_score` (TASK-015) is unowned for the same reason: it summarises the
+  pass-rate of every other gate, so repairing it means repairing those gates, not
+  rebuilding one stage.
   `schema_validity` is not listed as a gate at all: schema conformance is
   enforced by pydantic at construction, so a decorative always-passed gate was
   removed (the original one could never fail).
