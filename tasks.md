@@ -72,13 +72,19 @@
 > model-written defect. Assign the next sequence number; new tasks go to the
 > newest section only, never the completed one.
 
-- [ ] **TASK-007**: Implement Live Model Provider Adapters (OpenAI-compatible and Ollama)
+- [x] **TASK-007**: Implement Live Model Provider Adapters (OpenAI-compatible and Ollama)
   - **Objective**: Turn `src/lpf/models/provider.py` into a real provider layer (ROADMAP Stage 7) — implement the existing `ModelProvider` protocol for OpenAI-compatible and Ollama HTTP endpoints, selectable per-run without touching any stage code. Structured output: lesson JSON parsed and pydantic-validated so a malformed reply is a typed `ValidationError` that fails the run, never a silent artifact.
   - **Acceptance Criteria**:
     - Adapters conform to `ModelProvider` and are injected via `FactoryPipeline(model=...)`; the offline default stays `DeterministicMockModel`.
     - Malformed provider output (bad JSON, wrong schema) raises `ValidationError` and fails the run before QA.
     - Unit tests use a deterministic fake HTTP transport; `tests/` never touches the network.
     - Full pytest suite and ruff linters pass.
+  - **Implementation**:
+    - New `src/lpf/models/providers/` package: `base.py` (`HttpChatModel` — the whole PyPI-visible behaviour: request build, `ProviderError` for transport/HTTP failures, `ModelProvider`-shaped `generate`, whitespace `count_tokens`), `openai_compatible.py` (`OpenAICompatibleModel`, `/chat/completions`, Bearer auth, `response_format: json_object`), `ollama.py` (`OllamaModel`, native `/api/chat`, `format: json`, no auth), and a `create_live_model(kind, ...)` factory (`ConfigError / UNKNOWN_MODEL_KIND`).
+    - Structured output: when a schema is passed, the reply is parsed; malformed JSON or non-object JSON raises `ValidationError(code="MODEL_OUTPUT_NOT_JSON")` and a schema mismatch raises `ValidationError(code="MODEL_OUTPUT_INVALID_SCHEMA")`, both `LpfError`s so the pipeline fails the run cleanly (pipeline test: run FAILED at content, no QA events).
+    - Selectable per run: `FactoryPipeline(model=OpenAICompatibleModel(...))` runs the full pipeline; the default stays `DeterministicMockModel`. End-to-end run with the live adapter is byte-identical across two runs (tree-hash test).
+    - Tests: `tests/test_model_providers.py` (26 tests) over `httpx.MockTransport` — the same offline-transport convention as the research providers.
+    - Mutation-tested 13/13 caught (JSON guard, non-dict guard, error codes, pydantic swallow, JSON request field, HTTP status guard, transport catch, both `parse_content` paths, both default model names, auth header, factory fallback).
 
 - [ ] **TASK-008**: Add Provider Resilience (retry, timeout, backoff)
   - **Objective**: Hosts fail; a content run must neither crash nor hang. Add bounded retry, timeout, and exponential backoff to live model calls and surface a stable `ProviderError` (an `LpfError`) when a provider stays down.

@@ -367,14 +367,17 @@ v0.2.0 built the shared infrastructure.
 
 ## Current Status
 
-**v0.7.0 is complete and verified.** The stages from Discovery through Packaging
-run as one pipeline; `lpf generate --live-research` builds its evidence from real
-arXiv and Wikimedia sources through the same ranking engine that is verified
-against live services.
+**v0.7.0 is complete and verified, and v0.8.0 is underway.** The stages from
+Discovery through Packaging run as one pipeline; `lpf generate --live-research`
+builds its evidence from real arXiv and Wikimedia sources through the same
+ranking engine that is verified against live services. QA can rewind to content
+or assessment and repair repairable gate failures, bounded by a revision budget.
 
 **The product still does not exist end to end.** Its evidence is real but its
-prose is still mock — the writing is the last major fiction. Retrieval is also
-unrefined: questions are sent to every provider regardless of intent, so a
-beginner's definitional query still retrieves preprints that the scorer rejects
-by design. The stage machine does not loop, and output is Markdown/JSON rather
-than a rendered book.
+prose is still mock - the writing is the last major fiction. The model seam is
+now real, though: TASK-007 added OpenAI-compatible and Ollama adapters behind
+the existing `ModelProvider` protocol, with structured-output validation that
+turns malformed replies into typed failures. Retrieval is also unrefined:
+questions are sent to every provider regardless of intent, so a beginner's
+definitional query still retrieves preprints that the scorer rejects by design.
+Output is Markdown/JSON/HTML rather than a rendered book.

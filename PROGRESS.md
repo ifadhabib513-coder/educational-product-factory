@@ -11,6 +11,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 4 | 2026-10-07 | TASK-004 | Numerical Consistency Gate for Worked Examples | Completed | `be905b3` |
 | 5 | 2026-10-08 | TASK-005 | Multi-Format Packaging (HTML and ZIP Bundle) | Completed | `2b7a061` |
 | 6 | 2026-10-08 | TASK-006 | Bounded Cyclic Stage Machine Revision Loop | Completed | `b116f0c` |
+| 7 | 2026-10-11 | TASK-007 | Live Model Provider Adapters (OpenAI-compatible + Ollama) with structured-output validation | Completed | `e9b8f7f` |
 
 > **v0.7.0 milestone complete** — TASK-001 through TASK-006 are all done. The
 > next iteration needs a new milestone section in `tasks.md`.
@@ -106,3 +107,21 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - One mutation survived the first pass — removing the `NON_REPAIRABLE_GATES` early exit changed no behaviour, because the unknown-gate rule already covered it. The redundant branch was deleted in favour of a single ownership rule rather than written around with a test.
   - Docs: `docs/adr/010-bounded-qa-revision-loop.md` added; ADR-008 marked superseded in part; ROADMAP Stage 3 "Retry and repair" moved from PENDING to COMPLETE; `tasks.md` TASK-006 checked and the v0.7.0 milestone marked complete.
   - Commit `b116f0c`.
+
+### Iteration 7 — 2026-10-11: TASK-007
+- **Task**: Live model provider adapters — implement the existing `ModelProvider` protocol for OpenAI-compatible and Ollama HTTP endpoints, with structured-output validation so a malformed reply fails the run instead of shipping garbage.
+- **Rationale**: v0.8.0 milestone, first task — the "write real prose" work needs a real model seam before the writer itself gets real (TASK-009).
+- **Changes**:
+  - New `src/lpf/models/providers/` package:
+    - `base.py` (`HttpChatModel`) — all PyPI-visible behaviour: request build (`model`, `messages`, `temperature`, optional `max_tokens`, `headers`), `ProviderError` on transport failure / HTTP error status / non-JSON body / malformed vendor envelope, and `_validate_structured`: `json.loads` + `isinstance(dict)` + `schema.model_validate`, mapping failures to `ValidationError(code="MODEL_OUTPUT_NOT_JSON")` / `ValidationError(code="MODEL_OUTPUT_INVALID_SCHEMA")`. Client is injectable for offline tests; default client is a real `httpx.AsyncClient` with a 60s timeout.
+    - `openai_compatible.py` (`OpenAICompatibleModel`) — `/chat/completions`, `Authorization: Bearer` when an API key is set, `response_format: {"type": "json_object"}` for structured calls, content from `choices[0].message.content`.
+    - `ollama.py` (`OllamaModel`) — native `/api/chat`, no auth, `format: "json"` for structured calls, content from `message.content`.
+    - `__init__.py` — `create_live_model(kind, *, model, base_url, api_key, client)` factory keyed on `OpenAICompatibleModel.kind` / `OllamaModel.kind`; unknown kind raises `ConfigError(code="UNKNOWN_MODEL_KIND")`. Exported from `lpf.models` (`__all__`).
+  - Content and pipeline stages are untouched: the adapter is injected through the existing `FactoryPipeline(model=...)` seam, which is the requirement's point — no stage code changes.
+- **Verification**:
+  - `python -m pytest tests/`: 827 passed (26 new, 0 regressions).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 158 files already formatted.
+  - Mutation-tested (13/13 caught): JSON decode guard, non-object guard, error-code swap, pydantic error swallowed, JSON request field skipped, HTTP status guard dropped, transport catch changed to leak, both `parse_content` naive indexings, both default model names, auth header dropped, factory silently falling back on unknown kind.
+  - Protocol conformance: both adapters satisfy `ModelProvider` (`isinstance` + `protocol_satisfied`).
+  - Pipeline wiring: `OpenAICompatibleModel` over `httpx.MockTransport` runs the full offline pipeline and produces a byte-identical tree across two runs; a `ValidationError` from the adapter aborts the run at content before QA (test `TestMalformedOutputFailsRun`).
+  - `tests/` never touches the network — every live-ish test runs against `httpx.MockTransport`.
