@@ -12,7 +12,7 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 5 | 2026-10-08 | TASK-005 | Multi-Format Packaging (HTML and ZIP Bundle) | Completed | `2b7a061` |
 | 6 | 2026-10-08 | TASK-006 | Bounded Cyclic Stage Machine Revision Loop | Completed | `b116f0c` |
 | 7 | 2026-10-11 | TASK-007 | Live Model Provider Adapters (OpenAI-compatible + Ollama) with structured-output validation | Completed | `e9b8f7f` |
-| 8 | 2026-10-11 | TASK-008 | Provider Resilience (bounded retry, timeout, deterministic backoff) | Completed | `6d594be` |
+| 8 | 2026-10-11 | TASK-008 | Provider Resilience (bounded retry, timeout, deterministic backoff) | Completed | `07bbadc` |
 
 > **v0.8.0 milestone in progress** — TASK-007 and TASK-008 are complete
 > (live model seam + resilience). Remaining: TASK-009 revision-loop proof,
