@@ -15,10 +15,13 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
 | 8 | 2026-10-11 | TASK-008 | Provider Resilience (bounded retry, timeout, deterministic backoff) | Completed | `07bbadc` |
 | 9 | 2026-10-11 | TASK-009 | Revision Loop Repairs a Model-Written Worked-Example Defect (model-written worked examples, QA feedback threaded into rebuilds) | Completed | `56aac58` |
 | 10 | 2026-10-11 | TASK-010 | Route Retrieval by Query Intent (per-question provider pruning keyed on intent) | Completed | `34e38d1` |
+| 11 | 2026-10-11 | TASK-011 | Expose Model Provider Selection in CLI and Config (`--model`, env, `lpf.toml`) | Completed | `419c3c4` |
 
-> **v0.8.0 milestone in progress** — TASK-007 through TASK-010 are complete
-> (live model seam + resilience + model-written repair proof + intent-aware
-> retrieval). Remaining: TASK-011 CLI/config exposure.
+> **v0.8.0 milestone complete** — the last task (TASK-011) shipped the CLI/config
+> seam: `lpf generate --model openai-compatible|ollama` selects the writer
+> built in TASK-007, hardened in TASK-008, proven in TASK-009, and grounded by
+> intent-aware retrieval in TASK-010. Offline `mock` remains the default safe
+> path.
 
 ---
 ## Detailed Iteration Logs
@@ -169,3 +172,15 @@ This document tracks autonomous engineering iterations performed by the Ralph Lo
   - Mutation-tested (6/6 caught): router keeps all providers, plan builder skips pruning, DEFINITIONAL retains ARXIV, suitability falls back to GENERAL, empty prune not fallen back, router classifies every question as GENERAL.
   - New `tests/test_research_intent_routing.py` (suitability table, router pruning independent of the plan builder, execution never calls a pruned provider, query budgets survive rebuilds) plus reworked `tests/test_research_provider_injection.py`: a definitional "What is linear algebra?" over injected {ARXIV, WIKIMEDIA} retrieves only encyclopedic sources and never calls the arXiv provider, while "find papers about …" still queries arXiv end-to-end. Offline mock runs unchanged (`prune_providers(MOCK) == (MOCK,)` for every intent).
   - Live path is the same code — the stage injects live providers and the router prunes them — but needs network to exercise, so it is verified only by the offline suite here.
+
+### Iteration 11 — 2026-10-11: TASK-011
+- **Task**: Expose model provider selection in the CLI and config — `lpf generate` can choose the writer via `--model mock|openai-compatible|ollama`, plus env/`lpf.toml` for endpoint and key, defaulting to `mock` (offline).
+- **Rationale**: TASK-007..TASK-010 built the live model seam, resilience, a repair proof, and intent-aware retrieval, but `lpf generate` still hard-refused anything but mock ("only mock is implemented" — stale since TASK-007). The last v0.8.0 task was wiring the seam in.
+- **Changes**:
+  - `cli.py`: replaced the obsolete `--mock/--no-mock` guard with `--model <mock|openai-compatible|ollama>`. Resolution: flag > `LPF_PROVIDER` / `lpf.toml [model].kind` > default `mock`. Non-mock kinds go through `create_live_model(model=..., base_url=..., api_key=..., timeout_seconds=...)` from config; unknown kinds exit 1 with a readable `UNKNOWN_MODEL_KIND` message; `mock` leaves `model=None` so the pipeline default (deterministic offline) produces the unchanged output. CLI prints a `Writer model:` line.
+  - `config.py`: new `model_name`/`model_endpoint`/`api_key` fields plus `LPF_MODEL_NAME`/`LPF_MODEL_ENDPOINT`/`LPF_API_KEY` env vars, and an optional `lpf.toml` (`[model]` kind/name/endpoint/api_key, `[run]` log_level/output_dir/timeout) read with `tomllib`. Env always wins over the file; a missing or malformed file is a no-op; unknown keys are ignored.
+  - README: provider matrix table + offline-default admonition + `lpf.toml` example.
+- **Verification**:
+  - `python -m pytest tests/`: 877 passed (15 new, 0 regressions) — `tests/test_config.py` (toml/env precedence, malformed/missing files, unknown keys) and `tests/test_cli.py` (flag advertised, flag-beats-env, config-provider fallback, env→endpoint/key wiring into `create_live_model`, readable unknown-kind failure, live model passed to `FactoryPipeline`, and `--model mock` byte-identical to the default run tree).
+  - `python -m ruff check .`: All checks passed; `python -m ruff format --check .`: 161 files already formatted.
+  - Mutation-tested (6/6 caught): CLI flag ignored, mock entering the live branch, live-provider config (endpoint/key/name) dropped, live model not passed to the pipeline, toml overriding env, config dropping the model fields.

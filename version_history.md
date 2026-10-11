@@ -367,7 +367,7 @@ v0.2.0 built the shared infrastructure.
 
 ## Current Status
 
-**v0.7.0 is complete and verified, and v0.8.0 is underway.** The stages from
+**v0.8.0 is complete and verified.** The stages from
 Discovery through Packaging run as one pipeline; `lpf generate --live-research`
 builds its evidence from real arXiv and Wikimedia sources through the same
 ranking engine that is verified against live services. QA can rewind to content
@@ -393,10 +393,16 @@ paper-hunting intents. The prune is never-empty, so the deterministic offline
 provider still retrieves every run, and the plan artifact records the same
 providers the router executes.
 
+**The model seam is now reachable from the CLI.** Since TASK-011,
+`lpf generate --model mock|openai-compatible|ollama` selects the writer, with
+endpoint/name/key from `LPF_MODEL_NAME`/`LPF_MODEL_ENDPOINT`/`LPF_API_KEY` or an
+optional `lpf.toml`; the flag, env, file, and default form a documented
+precedence order. Offline `mock` stays the default safe path and produces
+byte-identical output — this completes the v0.8.0 milestone (live model seam →
+resilience → repair proof → intent-aware retrieval → CLI exposure).
+
 **The product still does not exist end to end.** Its evidence is real but its
 prose is still mock - the writing is the last major fiction. The model seam is
-now real, though: TASK-007 added OpenAI-compatible and Ollama adapters behind
-the existing `ModelProvider` protocol, with structured-output validation that
-turns malformed replies into typed failures. Output is Markdown/JSON/HTML
-rather than a rendered book, and `lpf generate` still selects the provider by
-CLI/config seam only (TASK-011).
+real and selectable per run, but a polished live run still needs that writer
+pointed at a real model. Output is Markdown/JSON/HTML
+rather than a rendered book.

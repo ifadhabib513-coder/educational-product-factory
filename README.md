@@ -28,6 +28,40 @@ pip install -e ".[dev]"
 lpf --help
 ```
 
+## Writer Model Providers
+
+`lpf generate` chooses the writer that writes the lessons:
+
+| `--model` / `LPF_PROVIDER` | Endpoint                       | Needs API key | Typical model |
+|----------------------------|--------------------------------|---------------|---------------|
+| `mock` (default)           | none (deterministic, offline)  | no            | —             |
+| `openai-compatible`        | `LPF_MODEL_ENDPOINT` (e.g. `https://api.openai.com/v1`) | `LPF_API_KEY` | `gpt-4o-mini` |
+| `ollama`                   | `LPF_MODEL_ENDPOINT` (e.g. `http://localhost:11434`)       | no            | `llama3.2`    |
+
+```bash
+lpf generate Physics "Projectile Motion"                 # offline mock, byte-identical
+lpf generate Physics "Projectile Motion" --model ollama  # local Ollama
+LPF_PROVIDER=openai-compatible LPF_MODEL_ENDPOINT=... lpf generate Physics "..." --model ollama
+```
+
+- **Offline `mock` is the default and the safe path**: it needs no network, no
+  keys, and produces reproducible output. Live providers are opt-in per run.
+- A CLI `--model` **flag overrides** `LPF_PROVIDER`, which overrides an
+  optional `lpf.toml` in the working directory:
+
+  ```toml
+  [model]
+  kind = "ollama"            # mock | openai-compatible | ollama
+  name = "llama3.2"          # LPF_MODEL_NAME
+  endpoint = "http://localhost:11434"  # LPF_MODEL_ENDPOINT
+  api_key = ""               # LPF_API_KEY
+  [run]
+  output_dir = "projects"    # LPF_OUTPUT_DIR
+  ```
+
+- Unknown kinds fail the run with a readable message rather than silently
+  falling back to a live provider.
+
 ## Development
 
 ```bash
