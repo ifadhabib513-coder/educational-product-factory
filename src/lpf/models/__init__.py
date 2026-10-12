@@ -11,6 +11,7 @@ from lpf.models.providers import (
     HttpChatModel,
     OllamaModel,
     OpenAICompatibleModel,
+    OpenCodeServerModel,
     create_live_model,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "MockProvider",
     "OllamaModel",
     "OpenAICompatibleModel",
+    "OpenCodeServerModel",
     "TaskType",
     "create_live_model",
 ]

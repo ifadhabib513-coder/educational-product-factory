@@ -42,7 +42,7 @@ def main(ctx: click.Context) -> None:
     "--model",
     "model_kind",
     default=None,
-    type=click.Choice(["mock", "openai-compatible", "ollama"], case_sensitive=False),
+    type=click.Choice(["mock", "openai-compatible", "ollama", "opencode-server"], case_sensitive=False),
     help=(
         "Writer model provider. Default: LPF_PROVIDER / lpf.toml [model].kind, "
         "else 'mock' (deterministic, offline — the safe default)."

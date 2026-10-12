@@ -21,6 +21,7 @@ from lpf.models import (
     HttpChatModel,
     OllamaModel,
     OpenAICompatibleModel,
+    OpenCodeServerModel,
     create_live_model,
 )
 from lpf.models.provider import ModelProvider
@@ -601,3 +602,326 @@ class TestClientLifecycle:
         pipeline = FactoryPipeline(output_dir=str(tmp_path))
         await pipeline.run(_inputs(), run_id="close-after-run")
         await pipeline.aclose()
+
+
+# ---------------------------------------------------------------------------
+# OpenCode Server
+# ---------------------------------------------------------------------------
+
+
+def _opencode_session_response(session_id: str) -> dict:
+    return {
+        "id": session_id,
+        "slug": "test-session",
+        "projectID": "test-project",
+        "directory": "/test",
+        "path": "",
+        "cost": 0,
+        "tokens": {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}},
+        "title": "Test session",
+        "version": "1.19.0",
+        "time": {"created": 1234567890, "updated": 1234567890},
+    }
+
+
+def _opencode_message_response(text: str, model_id: str = "big-pickle") -> dict:
+    return {
+        "info": {
+            "parentID": "msg_parent",
+            "role": "assistant",
+            "mode": "build",
+            "agent": "build",
+            "path": {"cwd": "/test", "root": "/test"},
+            "cost": 0,
+            "tokens": {"total": 100, "input": 80, "output": 10, "reasoning": 10, "cache": {"write": 0, "read": 0}},
+            "modelID": model_id,
+            "providerID": "opencode",
+            "time": {"created": 1234567890, "completed": 1234567890},
+            "finish": "stop",
+            "id": "msg_123",
+            "sessionID": "ses_test",
+        },
+        "parts": [
+            {"type": "step-start", "id": "prt_1", "sessionID": "ses_test", "messageID": "msg_123"},
+            {"type": "text", "text": text, "time": {"start": 1234567890, "end": 1234567890}, "id": "prt_2", "sessionID": "ses_test", "messageID": "msg_123"},
+            {"type": "step-finish", "reason": "stop", "tokens": {"total": 100, "input": 80, "output": 10, "reasoning": 10, "cache": {"write": 0, "read": 0}}, "cost": 0, "id": "prt_3", "sessionID": "ses_test", "messageID": "msg_123"},
+        ],
+    }
+
+
+class TestOpenCodeServerModel:
+    async def test_text_generation_creates_session_and_sends_message(self) -> None:
+        session_id = "ses_test123"
+        seen: dict = {}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            seen["url"] = str(request.url)
+            seen["payload"] = json.loads(request.content)
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response("hello world"))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        text = await provider.generate(messages=[{"role": "user", "content": "hi"}], temperature=0.0)
+        assert text == "hello world"
+        assert "ses_test123" in seen["url"] or "session" in seen["url"]
+        # First call creates session
+        assert len([k for k in seen if k == "url"]) >= 1
+
+    async def test_text_generation_reuses_session(self) -> None:
+        session_id = "ses_reuse"
+        call_count = {"n": 0}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            call_count["n"] += 1
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response("hi"))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        await provider.generate(messages=[{"role": "user", "content": "hi again"}])
+        # Session created once, then reused
+        assert call_count["n"] == 3  # 1 session create + 2 messages
+
+    async def test_schema_requests_json_and_returns_model(self) -> None:
+        session_id = "ses_schema"
+        draft = LessonDraft(title="Equations", body="An equality.", tags=["algebra"])
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            # The structured prompt includes the system prompt + user message
+            return httpx.Response(200, json=_opencode_message_response(draft.model_dump_json()))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        result = await provider.generate(
+            messages=[{"role": "user", "content": "Generate a lesson"}],
+            schema=LessonDraft,
+        )
+        assert isinstance(result, LessonDraft)
+        assert result.title == "Equations"
+        assert result.tags == ["algebra"]
+
+    async def test_malformed_json_raises_validation_error(self) -> None:
+        session_id = "ses_badjson"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response("{not json"))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "hi"}], schema=LessonDraft
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_NOT_JSON"
+
+    async def test_non_object_json_raises_validation_error(self) -> None:
+        session_id = "ses_nonobj"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response('"just a string"'))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "hi"}], schema=LessonDraft
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_NOT_JSON"
+
+    async def test_wrong_schema_raises_validation_error(self) -> None:
+        session_id = "ses_wrongschema"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response('{"title": 42}'))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "hi"}], schema=LessonDraft
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_INVALID_SCHEMA"
+        assert "LessonDraft" in excinfo.value.message
+
+    async def test_non_retryable_http_error_raises_provider_error(self) -> None:
+        session_id = "ses_401"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(401)
+
+        provider = OpenCodeServerModel(
+            client=_client(handler), base_url="http://127.0.0.1:4120"
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert excinfo.value.code == "OPENCODE_MESSAGE_FAILED"
+
+    async def test_transport_failure_raises_provider_error(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("no route to host")
+
+        provider = OpenCodeServerModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=1, backoff_seconds=0.0),
+            base_url="http://127.0.0.1:4120",
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        # Session creation happens first, so transport failure hits that endpoint
+        assert excinfo.value.code == "OPENCODE_SESSION_CREATE_FAILED"
+
+    async def test_malformed_response_raises_provider_error(self) -> None:
+        session_id = "ses_malformed"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json={"parts": []})  # no text part
+
+        provider = OpenCodeServerModel(
+            client=_client(handler), base_url="http://127.0.0.1:4120"
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert excinfo.value.code == "OPENCODE_RESPONSE_MALFORMED"
+
+    async def test_session_create_failure_raises_provider_error(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500)
+
+        provider = OpenCodeServerModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=1, backoff_seconds=0.0),
+            base_url="http://127.0.0.1:4120",
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert excinfo.value.code == "OPENCODE_SESSION_CREATE_FAILED"
+
+    async def test_session_missing_id_raises_provider_error(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"slug": "test"})  # missing 'id'
+
+        provider = OpenCodeServerModel(
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=1, backoff_seconds=0.0),
+            base_url="http://127.0.0.1:4120",
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        assert excinfo.value.code == "OPENCODE_SESSION_MISSING_ID"
+
+    async def test_model_parameter_overrides_default(self) -> None:
+        session_id = "ses_modelparam"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            seen["payload"] = json.loads(request.content)
+            return httpx.Response(200, json=_opencode_message_response("ok", model_id="big-pickle"))
+
+        seen: dict = {}
+        provider = OpenCodeServerModel(
+            model="big-pickle",
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        await provider.generate(messages=[{"role": "user", "content": "hi"}], model="nemotron-3-ultra-free")
+        assert seen["payload"].get("model") == {"providerID": "opencode", "modelID": "nemotron-3-ultra-free"}
+
+    async def test_count_tokens(self) -> None:
+        provider = OpenCodeServerModel(client=_client(lambda r: httpx.Response(200)))
+        assert await provider.count_tokens("a b c") == 3
+
+    def test_defaults(self) -> None:
+        provider = OpenCodeServerModel(client=_client(lambda r: httpx.Response(200)))
+        assert provider.model == "big-pickle"
+        assert provider.base_url == "http://127.0.0.1:4120"
+        assert provider.provider_id == "opencode"
+
+    async def test_aclose_deletes_session(self) -> None:
+        session_id = "ses_close"
+        delete_called = {"called": False}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            if request.url.path == f"/session/{session_id}" and request.method == "DELETE":
+                delete_called["called"] = True
+                return httpx.Response(200)
+            return httpx.Response(200, json=_opencode_message_response("ok"))
+
+        provider = OpenCodeServerModel(base_url="http://127.0.0.1:4120")
+        # Inject mock client after creation so provider owns it
+        provider._client = _client(handler)
+        provider._owns_client = True
+        await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        await provider.aclose()
+        assert delete_called["called"] is True
+
+    async def test_aclose_does_not_delete_unowned_client(self) -> None:
+        session_id = "ses_no_delete"
+        delete_called = {"called": False}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            if request.url.path == f"/session/{session_id}" and request.method == "DELETE":
+                delete_called["called"] = True
+                return httpx.Response(200)
+            return httpx.Response(200, json=_opencode_message_response("ok"))
+
+        client = _client(handler)
+        provider = OpenCodeServerModel(base_url="http://127.0.0.1:4120", client=client)
+        await provider.generate(messages=[{"role": "user", "content": "hi"}])
+        await provider.aclose()
+        # Injected client -> we don't delete the session
+        assert delete_called["called"] is False
+        await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# CreateLiveModel: opencode-server
+# ---------------------------------------------------------------------------
+
+
+class TestCreateLiveModelOpenCode:
+    def test_builds_opencode_server(self) -> None:
+        provider = create_live_model("opencode-server", client=_client(_json200))
+        assert isinstance(provider, OpenCodeServerModel)
+        assert OpenCodeServerModel.kind == "opencode-server"
+
+    def test_kind_alias_resolves(self) -> None:
+        provider = create_live_model("opencode_server", client=_client(_json200))
+        assert isinstance(provider, OpenCodeServerModel)
+
+    @pytest.mark.parametrize("kind", ["opencode-server", "opencode_server", "OPENCODE-SERVER"])
+    def test_kind_lookup_case_insensitive(self, kind: str) -> None:
+        provider = create_live_model(kind, client=_client(_json200))
+        assert isinstance(provider, OpenCodeServerModel)

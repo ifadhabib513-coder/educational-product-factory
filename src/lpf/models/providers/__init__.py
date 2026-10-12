@@ -8,13 +8,15 @@ from lpf.errors import ConfigError
 from lpf.models.providers.base import HttpChatModel
 from lpf.models.providers.ollama import OllamaModel
 from lpf.models.providers.openai_compatible import OpenAICompatibleModel
+from lpf.models.providers.opencode_server import OpenCodeServerModel
 from lpf.research.transport import RetryPolicy
 
-__all__ = ["HttpChatModel", "OllamaModel", "OpenAICompatibleModel", "create_live_model"]
+__all__ = ["HttpChatModel", "OllamaModel", "OpenAICompatibleModel", "OpenCodeServerModel", "create_live_model"]
 
 _KIND_CLASSES: dict[str, type[HttpChatModel]] = {
     OpenAICompatibleModel.kind: OpenAICompatibleModel,
     OllamaModel.kind: OllamaModel,
+    OpenCodeServerModel.kind: OpenCodeServerModel,
 }
 
 
