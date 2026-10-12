@@ -33,41 +33,16 @@ def main(ctx: click.Context) -> None:
     ctx.obj["config"] = config
 
 
-@main.command()
-@click.argument("subject")
-@click.argument("topic")
-@click.option("--level", default="high-school", help="Learner level")
-@click.option("--run-id", default="run", show_default=True, help="Run identifier")
-@click.option(
-    "--model",
-    "model_kind",
-    default=None,
-    type=click.Choice(["mock", "openai-compatible", "ollama", "opencode-server"], case_sensitive=False),
-    help=(
-        "Writer model provider. Default: LPF_PROVIDER / lpf.toml [model].kind, "
-        "else 'mock' (deterministic, offline — the safe default)."
-    ),
-)
-@click.option(
-    "--live-research",
-    is_flag=True,
-    default=False,
-    help="Search real sources via arXiv and Wikimedia instead of the offline provider.",
-)
-@click.pass_context
-def generate(
-    ctx: click.Context,
+async def _async_main(
+    config: LpfConfig,
     subject: str,
     topic: str,
     level: str,
     run_id: str,
-    model_kind: str | None,
+    kind: str,
     live_research: bool,
 ) -> None:
-    """Generate an educational product for a subject and topic."""
-    config: LpfConfig = ctx.obj["config"]
-    kind = model_kind or config.provider
-
+    """Async entry point for the generate command."""
     model = None
     if kind == "mock":
         writer = "mock (deterministic, offline)"
@@ -117,17 +92,17 @@ def generate(
         research_providers=research_providers,
     )
     try:
-        result = asyncio.run(pipeline.run(inputs, run_id=run_id))
+        result = await pipeline.run(inputs, run_id=run_id)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     finally:
-        asyncio.run(pipeline.aclose())
+        await pipeline.aclose()
 
     if not result.succeeded:
         click.echo(f"Run failed at stage '{result.state.stage.value}'.", err=True)
         if result.state.failure_reason:
             click.echo(f"Reason: {result.state.failure_reason}", err=True)
-        ctx.exit(1)
+        raise click.ClickException("Run failed")
 
     verification = result.verification
     click.echo(f"Run complete: {result.run_id}")
@@ -149,6 +124,44 @@ def generate(
                 indent=2,
             )
         )
+
+
+@main.command()
+@click.argument("subject")
+@click.argument("topic")
+@click.option("--level", default="high-school", help="Learner level")
+@click.option("--run-id", default="run", show_default=True, help="Run identifier")
+@click.option(
+    "--model",
+    "model_kind",
+    default=None,
+    type=click.Choice(["mock", "openai-compatible", "ollama", "opencode-server"], case_sensitive=False),
+    help=(
+        "Writer model provider. Default: LPF_PROVIDER / lpf.toml [model].kind, "
+        "else 'mock' (deterministic, offline — the safe default)."
+    ),
+)
+@click.option(
+    "--live-research",
+    is_flag=True,
+    default=False,
+    help="Search real sources via arXiv and Wikimedia instead of the offline provider.",
+)
+@click.pass_context
+def generate(
+    ctx: click.Context,
+    subject: str,
+    topic: str,
+    level: str,
+    run_id: str,
+    model_kind: str | None,
+    live_research: bool,
+) -> None:
+    """Generate an educational product for a subject and topic."""
+    config: LpfConfig = ctx.obj["config"]
+    kind = model_kind or config.provider
+
+    asyncio.run(_async_main(config, subject, topic, level, run_id, kind, live_research))
 
 
 if __name__ == "__main__":

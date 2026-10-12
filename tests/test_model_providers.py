@@ -16,6 +16,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from lpf.domain.worked_example import WorkedExampleDraft
 from lpf.errors import ConfigError, LpfError, ProviderError, ValidationError
 from lpf.models import (
     HttpChatModel,
@@ -904,6 +905,241 @@ class TestOpenCodeServerModel:
         # Injected client -> we don't delete the session
         assert delete_called["called"] is False
         await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# OpenCode Server: structured output regression tests
+# ---------------------------------------------------------------------------
+
+
+def _valid_worked_example_draft() -> dict:
+    return {
+        "problem_statement": "Solve for x: 2x + 3 = 7",
+        "solution_steps": [
+            {"order": 1, "statement": "Subtract 3 from both sides", "expression": "2x = 4"},
+            {"order": 2, "statement": "Divide by 2", "expression": "x = 2"},
+        ],
+        "final_answer": "x = 2",
+        "common_errors": ["Forgetting to subtract 3 first"],
+    }
+
+
+class TestOpenCodeServerStructuredOutput:
+    async def test_valid_json_matching_worked_example_draft(self) -> None:
+        session_id = "ses_valid"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response(
+                json.dumps(_valid_worked_example_draft())
+            ))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        result = await provider.generate(
+            messages=[{"role": "user", "content": "test"}],
+            schema=WorkedExampleDraft,
+        )
+        assert isinstance(result, WorkedExampleDraft)
+        assert result.problem_statement == "Solve for x: 2x + 3 = 7"
+        assert len(result.solution_steps) == 2
+        assert result.final_answer == "x = 2"
+
+    async def test_json_surrounded_by_markdown_code_fence(self) -> None:
+        session_id = "ses_fence"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            # Response wrapped in markdown code fence
+            content = f"```json\n{json.dumps(_valid_worked_example_draft())}\n```"
+            return httpx.Response(200, json=_opencode_message_response(content))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        result = await provider.generate(
+            messages=[{"role": "user", "content": "test"}],
+            schema=WorkedExampleDraft,
+        )
+        assert isinstance(result, WorkedExampleDraft)
+        assert result.problem_statement == "Solve for x: 2x + 3 = 7"
+
+    async def test_invalid_json_raises_not_json_error(self) -> None:
+        session_id = "ses_badjson"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            return httpx.Response(200, json=_opencode_message_response("{not valid json"))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "test"}],
+                schema=WorkedExampleDraft,
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_NOT_JSON"
+
+    async def test_json_missing_required_fields_raises_schema_error(self) -> None:
+        session_id = "ses_missing"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            # Missing solution_steps and final_answer
+            return httpx.Response(200, json=_opencode_message_response(json.dumps({
+                "problem_statement": "Solve for x",
+                "common_errors": []
+            })))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "test"}],
+                schema=WorkedExampleDraft,
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_INVALID_SCHEMA"
+        # Should mention missing fields
+        errors = excinfo.value.details.get("errors", [])
+        assert any(e["loc"] == ("solution_steps",) for e in errors)
+        assert any(e["loc"] == ("final_answer",) for e in errors)
+
+    async def test_json_wrong_field_type_raises_schema_error(self) -> None:
+        session_id = "ses_wrongtype"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            # solution_steps should be list, not string
+            return httpx.Response(200, json=_opencode_message_response(json.dumps({
+                "problem_statement": "test",
+                "solution_steps": "not a list",
+                "final_answer": "x = 1",
+                "common_errors": []
+            })))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "test"}],
+                schema=WorkedExampleDraft,
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_INVALID_SCHEMA"
+        errors = excinfo.value.details.get("errors", [])
+        assert any(e["loc"] == ("solution_steps",) for e in errors)
+
+    async def test_first_invalid_then_valid_repair(self) -> None:
+        session_id = "ses_repair"
+        call_count = {"n": 0}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # First response: missing required fields
+                return httpx.Response(200, json=_opencode_message_response(json.dumps({
+                    "problem_statement": "test",
+                    "common_errors": []
+                })))
+            # Second response (repair): valid
+            return httpx.Response(200, json=_opencode_message_response(
+                json.dumps(_valid_worked_example_draft())
+            ))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        result = await provider.generate(
+            messages=[{"role": "user", "content": "test"}],
+            schema=WorkedExampleDraft,
+        )
+        assert isinstance(result, WorkedExampleDraft)
+        assert call_count["n"] == 2  # First attempt + one repair
+
+    async def test_repeated_invalid_exhausts_retry_budget(self) -> None:
+        session_id = "ses_exhaust"
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            # Always return invalid JSON
+            return httpx.Response(200, json=_opencode_message_response(json.dumps({
+                "problem_statement": "test",
+                "common_errors": []
+            })))
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        with pytest.raises(ValidationError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "test"}],
+                schema=WorkedExampleDraft,
+            )
+        assert excinfo.value.code == "MODEL_OUTPUT_INVALID_SCHEMA"
+        # Should mention attempts = MAX_STRUCTURED_RETRIES + 1 = 4
+        assert excinfo.value.details.get("attempts") == 4
+
+    async def test_provider_network_error_no_mock_fallback(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("connection refused")
+
+        provider = OpenCodeServerModel(
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+            retry=RetryPolicy(max_attempts=1, backoff_seconds=0.0),
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            await provider.generate(
+                messages=[{"role": "user", "content": "test"}],
+                schema=WorkedExampleDraft,
+            )
+        assert excinfo.value.code == "OPENCODE_SESSION_CREATE_FAILED"
+        # No silent fallback to mock - error is propagated
+
+    async def test_chosen_model_id_is_used(self) -> None:
+        session_id = "ses_modelid"
+        seen_model: dict = {}
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/session":
+                return httpx.Response(200, json=_opencode_session_response(session_id))
+            seen_model["payload"] = json.loads(request.content)
+            return httpx.Response(200, json=_opencode_message_response(
+                json.dumps(_valid_worked_example_draft())
+            ))
+
+        provider = OpenCodeServerModel(
+            model="big-pickle",
+            base_url="http://127.0.0.1:4120",
+            client=_client(handler),
+        )
+        await provider.generate(
+            messages=[{"role": "user", "content": "test"}],
+            schema=WorkedExampleDraft,
+            model="nemotron-3-ultra-free",
+        )
+        assert seen_model["payload"].get("model") == {
+            "providerID": "opencode",
+            "modelID": "nemotron-3-ultra-free"
+        }
 
 
 # ---------------------------------------------------------------------------

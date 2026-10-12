@@ -291,3 +291,73 @@ class TestCliReporting:
         providers = captured["research_providers"]
         assert set(providers) == {SearchProvider.ARXIV, SearchProvider.WIKIMEDIA}
         assert "Research providers: arxiv, wikimedia" in result.output
+
+
+class TestCliAsyncCleanup:
+    """The CLI's single event loop must close all resources without RuntimeError."""
+
+    def test_cli_runs_and_closes_without_event_loop_error(self, tmp_path: Path) -> None:
+        """Exercise the full async CLI path (run + aclose) with mock provider.
+
+        This would previously raise 'RuntimeError: Event loop is closed'
+        because asyncio.run() was called twice, creating two separate loops.
+        """
+        result = CliRunner().invoke(
+            main,
+            [
+                "generate",
+                "Physics",
+                "Projectile Motion",
+                "--run-id",
+                "cli-cleanup",
+                "--model",
+                "mock",
+            ],
+            env={"LPF_OUTPUT_DIR": str(tmp_path)},
+        )
+        assert result.exit_code == 0, result.output
+        assert "Run complete: cli-cleanup" in result.output
+        assert "RuntimeError" not in result.output
+        assert "Event loop is closed" not in result.output
+
+    def test_cli_live_research_closes_without_event_loop_error(self, tmp_path: Path, monkeypatch) -> None:
+        """Exercise live research path with mocked providers."""
+
+        class FakeResult:
+            run_id = "cli-cleanup-live"
+            succeeded = True
+            artifacts: list = []
+            verification = None
+            package = None
+
+        class FakePipeline:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            async def run(self, inputs, run_id):
+                return FakeResult()
+
+            async def aclose(self) -> None:
+                pass
+
+        monkeypatch.setattr("lpf.cli.FactoryPipeline", FakePipeline)
+        result = CliRunner().invoke(
+            main,
+            [
+                "generate",
+                "Physics",
+                "Projectile Motion",
+                "--run-id",
+                "cli-cleanup-live",
+                "--live-research",
+            ],
+            env={"LPF_OUTPUT_DIR": str(tmp_path)},
+        )
+        assert result.exit_code == 0, result.output
+        assert "Run complete: cli-cleanup-live" in result.output
+        assert "RuntimeError" not in result.output
+        assert "Event loop is closed" not in result.output
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
